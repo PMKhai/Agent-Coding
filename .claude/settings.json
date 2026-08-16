@@ -2,6 +2,24 @@
   "env": {
     "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
+  "extraKnownMarketplaces": {
+    "open-design": {
+      "source": {
+        "source": "github",
+        "repo": "nexu-io/open-design"
+      }
+    },
+    "diagram-design": {
+      "source": {
+        "source": "github",
+        "repo": "cathrynlavery/diagram-design"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "open-design@open-design": true,
+    "diagram-design@diagram-design": true
+  },
   "hooks": {
     "PreToolUse": [
       {

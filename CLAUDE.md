@@ -63,6 +63,7 @@ ORCHESTRATOR (Main Session)
 | **Architect**      | "Designing systems is my passion"                        | opus  | Analyze requirements, write SPEC.md              |
 | **Researcher**     | "Knowledge is power"                                     | opus  | Research docs, libraries, best practices         |
 | **Coder Backend**  | "Clean, efficient code is art"                           | opus  | Implement backend — API, DB, services            |
+| **Designer**       | "A design that cannot be opened in a browser is just an opinion" | opus | Design artifacts via Open Design MCP + diagram-design |
 | **Coder Frontend** | "Beautiful UI is a conversation between design and code" | opus  | Implement UI, verify with browser MCP            |
 | **Reviewer**       | "Code quality is non-negotiable"                         | opus  | Review code, approve or reject                   |
 | **Debugger**       | "Bugs fear me"                                           | opus  | Fix issues found by Reviewer                     |
