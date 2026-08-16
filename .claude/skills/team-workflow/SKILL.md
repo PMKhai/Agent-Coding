@@ -33,8 +33,9 @@ Otherwise prefer `/workflow` — it's cheaper and simpler.
 2. `Read companies.json` and pick `companies[].rooms[]` where
    `kind === "engineer"` for the company that owns the target repo.
    Default = `qualgo`. If the user passed `--teams a,b`, filter to that set.
-3. Pick `team_name = "qualgo-engineer-" + last 8 chars of task-id`. Stable per
-   task so resuming a failed run reuses the same team.
+3. There is no team object to create — the session has a single implicit team.
+   Each teammate's `name` is its address; keep names stable per task so a
+   resumed run can message the same teammates.
 
 ## Step 2 — Architect lane (foreground)
 
@@ -43,11 +44,10 @@ Spawn the Architect first, alone:
 ```
 Agent({
   subagent_type: "architect",
-  team_name,
   name: "Architect",
   run_in_background: false,
   prompt: `
-You are the Architect on team ${team_name}.
+You are the Architect for tasks/${taskId}.
 Read tasks/${taskId}/input.md and the target repo.
 Output two artefacts:
   1. tasks/${taskId}/SPEC.md  — the full spec (sections, data model, APIs)
@@ -95,8 +95,7 @@ turn (all `run_in_background: true`):
 ```
 Agent({
   subagent_type: <team.agent>,        // coder-frontend / coder-backend / devops
-  team_name,
-  name: <PascalCase team name>,        // "Frontend"
+  name: <PascalCase team name>,        // "Frontend" — this is the SendMessage address
   run_in_background: true,
   isolation: "worktree",               // each team works on an isolated copy
   prompt: teammateBrief({
@@ -113,7 +112,7 @@ Agent({
 `teammateBrief` template:
 
 ```
-You are ${teamName} on team ${team_name}.
+You are ${teamName}, working on tasks/${taskId} alongside the teammates below.
 
 ## Your lane
 ${lane}
@@ -150,13 +149,12 @@ Wait for **all** spawned teammates to return.
 
 ## Step 4 — Review lane
 
-Spawn Reviewer foreground with `team_name` set so it can SendMessage back
+Spawn Reviewer foreground with `name: "Reviewer"` so it can SendMessage back
 to any teammate for clarification:
 
 ```
 Agent({
   subagent_type: "reviewer",
-  team_name,
   name: "Reviewer",
   run_in_background: false,
   prompt: `
@@ -186,7 +184,7 @@ Loop max 3 times. After 3, abort with a summary for the user.
 
 When Reviewer is APPROVED:
 
-1. `TeamDelete({ name: team_name })`.
+1. Nothing to tear down — teammates end on their own once their lane is done.
 2. Merge each teammate's worktree branch back into the user's branch.
    Capture per-repo commit hashes in `tasks/${taskId}/commits.md`.
 3. Spawn Learner (sequential, no team) to update
@@ -204,21 +202,26 @@ When Reviewer is APPROVED:
 
 ## Common mistakes to avoid
 
-- Spawning teammates without `team_name` — they can't SendMessage and the
-  whole point is lost. If you forget, kill and respawn.
+- Spawning teammates without `name` — an unnamed agent has no address, so
+  nobody can SendMessage it and the whole point is lost. Respawn with a name.
+- Passing `team_name` — deprecated and ignored. Harmless, but it does not
+  create or join anything; the name alone makes a teammate reachable.
 - Spawning all 4 teammates regardless of architect's plan — empty lane
   means **don't spawn**.
 - Letting Frontend edit `ops-platform/cmd/...` (a backend path). Pass
   `--add-dir` only for the team's repo allowlist.
 - Merging worktrees before Reviewer approves. Hold all merges until Stage 6.
-- Forgetting `TeamDelete` on cleanup. Stale teams accumulate in
-  `~/.claude/teams/`.
 
 ## Tool reference
 
-- `TeamCreate({ name })` — create a team.
-- `TeamDelete({ name })` — tear it down.
-- `Agent({ subagent_type, team_name, name, run_in_background, isolation, prompt })`
-  — spawn a teammate. The `team_name` is what makes it a teammate vs a sub-agent.
-- `SendMessage({ to: name, body })` — teammate-to-teammate message. Available
-  to the orchestrator and to every teammate.
+- `Agent({ subagent_type, name, run_in_background, isolation, prompt })` —
+  spawn a teammate. **`name` is the address** — without it the agent cannot be
+  messaged. There is no team to create or delete.
+- `SendMessage({ to, message, summary? })` — teammate-to-teammate message;
+  `to` is the teammate's `name`. Available to the orchestrator and to every
+  teammate. Note the field is `message`, not `body`. A background teammate can
+  also send to `"main"` to reach the orchestrator.
+- `ListAgents()` — list the agents you can message, with their names.
+
+Plain text output is NOT visible to other agents — a teammate that wants to
+tell another something MUST call `SendMessage`.

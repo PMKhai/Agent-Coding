@@ -59,29 +59,26 @@ ORCHESTRATOR (main session)
   | 2. read companies.json -> resolve company.room.teams
   | 3. write tasks/[id]/team-board.md (shared task list)
   v
-TeamCreate(name="qualgo-engineer-<task-id-short>")
-  |
   +--[Stage A: Plan — Architect alone]
-  |    Agent(name="Architect", subagent_type="architect", team_name=..., prompt="…")
+  |    Agent(name="Architect", subagent_type="architect", prompt="…")
   |    writes SPEC.md and tasks/[id]/team-board.md with assignments
   |
   +--[Stage B: Execute — parallel teammates]
-  |    Agent(name="Frontend", subagent_type="coder-frontend", team_name=..., run_in_background=true, ...)
-  |    Agent(name="Backend",  subagent_type="coder-backend",  team_name=..., run_in_background=true, ...)
-  |    Agent(name="DevOps",   subagent_type="devops",         team_name=..., run_in_background=true, ...)
-  |    Teammates message each other directly:
-  |       SendMessage(to="Backend",  "what's the contract for POST /webhooks/x?")
-  |       SendMessage(to="Frontend", "expects { id, status, payload }")
-  |       SendMessage(to="DevOps",   "new env var WEBHOOK_SECRET must land in dev kustomize")
+  |    Agent(name="Frontend", subagent_type="coder-frontend", run_in_background=true, ...)
+  |    Agent(name="Backend",  subagent_type="coder-backend",  run_in_background=true, ...)
+  |    Agent(name="DevOps",   subagent_type="devops",         run_in_background=true, ...)
+  |    Teammates message each other directly by name:
+  |       SendMessage(to="Backend",  message="what's the contract for POST /webhooks/x?")
+  |       SendMessage(to="Frontend", message="expects { id, status, payload }")
+  |       SendMessage(to="DevOps",   message="new env var WEBHOOK_SECRET must land in dev kustomize")
   |    Each teammate updates team-board.md when their lane is done.
   |
   +--[Stage C: Review]
-  |    Agent(name="Reviewer", subagent_type="reviewer", team_name=..., prompt="…")
+  |    Agent(name="Reviewer", subagent_type="reviewer", prompt="…")
   |    -> review/approval.md or review/issues.md
   |
   +--[If issues] Architect rebalances board -> back to Stage B for affected lanes only
   v
-TeamDelete(name=...)
 ORCHESTRATOR: commit + tasks/[id]/commit.md + Learner
 ```
 
@@ -124,8 +121,8 @@ ORCHESTRATOR: commit + tasks/[id]/commit.md + Learner
    **and** fill the lanes table with concrete deliverables per team.
 
 5. **Stage B — execute**: read updated team-board, spawn one teammate per
-   non-empty lane _in parallel_ (`run_in_background=true`, `team_name=<team>`,
-   `name=<TitleCase>`). Each prompt must include:
+   non-empty lane _in parallel_ (`run_in_background=true`, `name=<TitleCase>` —
+   the name is the SendMessage address). Each prompt must include:
    - the full SPEC.md content (don't make them re-read)
    - their lane row from team-board
    - the team roster (so they know who to SendMessage)
@@ -135,25 +132,21 @@ ORCHESTRATOR: commit + tasks/[id]/commit.md + Learner
 6. **Wait** for all teammates to finish. If any fail, capture stderr in
    `tasks/[task-id]/team-board.md` under "Open questions".
 
-7. **Stage C — review**: spawn Reviewer foreground with `team_name` set so it
+7. **Stage C — review**: spawn Reviewer foreground with `name="Reviewer"` so it
    can SendMessage back to teammates for clarification.
 
 8. **Loop**: if Reviewer issues, spawn Architect again _(rebalance)_, then
    re-spawn only the affected teammates. Max 3 loops.
 
-9. **Cleanup**: `TeamDelete(name=team_name)`. Commit the result. Spawn
-   Learner.
+9. **Cleanup**: nothing to tear down — teammates end on their own. Commit the
+   result. Spawn Learner.
 
 ## Spawning pattern (Claude Code)
 
 ```js
 // Stage A
-const team = "qualgo-engineer-" + taskId.slice(-8);
-TeamCreate({ name: team });
-
 const arch = Agent({
   subagent_type: "architect",
-  team_name: team,
   name: "Architect",
   run_in_background: false,
   prompt: `… write SPEC.md AND fill tasks/${taskId}/team-board.md lanes …`,
@@ -162,37 +155,34 @@ const arch = Agent({
 // Stage B — parallel
 const fe = Agent({
   subagent_type: "coder-frontend",
-  team_name: team,
   name: "Frontend",
   run_in_background: true,
+  isolation: "worktree",
   prompt: feBrief,
 });
 const be = Agent({
   subagent_type: "coder-backend",
-  team_name: team,
   name: "Backend",
   run_in_background: true,
+  isolation: "worktree",
   prompt: beBrief,
 });
 const dx = Agent({
   subagent_type: "devops",
-  team_name: team,
   name: "DevOps",
   run_in_background: true,
+  isolation: "worktree",
   prompt: dxBrief,
 });
-// wait for all
+// wait for all — ListAgents() shows who is still live
 
 // Stage C
 const rv = Agent({
   subagent_type: "reviewer",
-  team_name: team,
   name: "Reviewer",
   run_in_background: false,
   prompt: rvBrief,
 });
-
-TeamDelete({ name: team });
 ```
 
 ## Task complete when
@@ -229,8 +219,10 @@ cat tasks/[task-id]/review/{frontend,backend,devops,architect}-summary.md
 
 - ❌ Spawning all teammates without Architect's lane assignments — they don't
   know where to draw the line. Always run Stage A first.
-- ❌ Skipping `team_name` — the spawned agents won't be able to SendMessage,
-  defeating the point. If you forget, fall back to `/workflow`.
+- ❌ Spawning a teammate without `name` — an unnamed agent has no address, so
+  nobody can SendMessage it. Always pass `name`.
+- ❌ Passing `team_name` — deprecated and ignored. The session has one implicit
+  team; the name alone makes an agent reachable.
 - ❌ Pushing too many teammates — start with the lanes the Architect filled in,
   not "all 4 just in case". Empty lane → no teammate.
 - ❌ Letting teammates touch repos outside their allowlist — pass each

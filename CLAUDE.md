@@ -127,16 +127,19 @@ service+k8s manifest). Reuses the engineer room composition from
 Spawn shape (lead session, single tool-use turn for Stage B):
 
 ```python
-TeamCreate(name="qualgo-engineer-...")
-Agent(name="Architect", subagent_type="architect", team_name=..., run_in_background=false)
+Agent(name="Architect", subagent_type="architect", run_in_background=false)
 # wait, read team-board.md, then in parallel:
-Agent(name="Frontend", subagent_type="coder-frontend", team_name=..., run_in_background=true, isolation="worktree")
-Agent(name="Backend",  subagent_type="coder-backend",  team_name=..., run_in_background=true, isolation="worktree")
-Agent(name="DevOps",   subagent_type="devops",         team_name=..., run_in_background=true, isolation="worktree")
+Agent(name="Frontend", subagent_type="coder-frontend", run_in_background=true, isolation="worktree")
+Agent(name="Backend",  subagent_type="coder-backend",  run_in_background=true, isolation="worktree")
+Agent(name="DevOps",   subagent_type="devops",         run_in_background=true, isolation="worktree")
 # wait for all
-Agent(name="Reviewer", subagent_type="reviewer", team_name=..., run_in_background=false)
-TeamDelete(name=...)
+Agent(name="Reviewer", subagent_type="reviewer", run_in_background=false)
 ```
+
+There is no team object to create or tear down — the session has a single
+implicit team. **`name` is the address**: a named agent can be reached with
+`SendMessage(to="Frontend", message="…")`, and `ListAgents()` shows who is
+live. Agents left unnamed cannot be messaged.
 
 See `.claude/skills/team-workflow/SKILL.md` for the full protocol and
 `team-board.md` template.
