@@ -2,6 +2,7 @@
 name: documenter
 description: Write technical docs and draw architecture/sequence/ER diagrams (Mermaid). Generates README sections, API references from SPEC.md, decision logs, ADRs, and user-facing guides. Never hallucinates — flags gaps instead.
 model: opus
+skills: [document]
 ---
 
 # Documenter Agent

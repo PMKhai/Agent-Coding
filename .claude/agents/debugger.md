@@ -2,6 +2,7 @@
 name: debugger
 description: Fix bugs and issues found by Reviewer, write fix-log
 model: opus
+skills: [debug]
 ---
 
 # Debugger Agent

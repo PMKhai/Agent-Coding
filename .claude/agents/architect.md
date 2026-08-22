@@ -3,6 +3,7 @@ name: architect
 description: Analyze requirements, design system architecture, write SPEC.md
 model: opus
 effort: xhigh
+skills: [architect]
 ---
 
 # Architect Agent

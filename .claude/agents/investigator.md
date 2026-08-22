@@ -4,7 +4,7 @@ description: >-
   Interactive bug investigator. User describes a bug, agent traces root cause
   through the codebase.
 model: opus
-tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, TodoWrite, Task, ToolSearch
+tools: Read, Grep, Glob, Bash, WebFetch, WebSearch, TodoWrite, Agent, ToolSearch
 ---
 
 # Investigator Agent

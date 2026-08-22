@@ -10,6 +10,17 @@ user-invocable: false
 
 Coordinate the multi-agent workflow by spawning agents in sequence using the `Agent()` tool. The main session is the orchestrator — there is no separate central agent.
 
+**Spawn each stage by its agent name.** `subagent_type` takes the `name` from a
+file in `.claude/agents/`, and that file's body becomes the subagent's system
+prompt. Passing `subagent_type="general-purpose"` and pasting a one-line
+paraphrase of the soul into `prompt` loads none of it — not the soul, not the
+`effort`, not the `tools` allowlist. Do not re-state the soul in `prompt`; it is
+already loaded. `prompt` carries only what is specific to this task: paths, the
+SPEC, the previous stage's output.
+
+For the same reason, do not pass `model=`. Every agent file already declares
+`model: opus`, and a spawn-site override outranks the frontmatter.
+
 ## Workflow Chain
 
 ```
@@ -27,7 +38,7 @@ User --> Orchestrator (Main Session)
               |---------------|---------------|
               v               v               v
         backend-only     frontend-only    full-stack
-              |               |         (parallel)
+              |               |         (Claude parallel; Codex sequential)
          CODER-BE        CODER-FE     CODER-BE + CODER-FE
               |               |               |
               |---------------|---------------|
@@ -84,12 +95,10 @@ These tools give you deep codebase understanding. Always explore before coding.
 
 ```python
 architect = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="architect",
+    name="Architect",
     run_in_background=True,
     prompt=f"""
-You are the Architect. Soul: "Designing systems is my passion"
-
 Task: {task_description}
 Target repo: {repo_path}
 {mcp_instruction}
@@ -106,11 +115,10 @@ SPEC.md must include:
 )
 
 researcher = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="researcher",
+    name="Researcher",
     run_in_background=True,
     prompt=f"""
-You are the Researcher. Soul: "Knowledge is power"
 {mcp_instruction}
 Research: {research_topics}
 
@@ -132,11 +140,10 @@ Read SPEC.md and check the `Task type:` field, then route accordingly:
 spec = read(f"{task_dir}/SPEC.md")
 
 coder_be = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="coder-backend",
+    name="Backend",
     run_in_background=False,
     prompt=f"""
-You are the Coder Backend. Soul: "Clean, efficient code is art"
 {mcp_instruction}
 SPEC.md:
 {spec}
@@ -154,11 +161,10 @@ When done, write summary to: {task_dir}/review/backend-summary.md
 
 ```python
 coder_fe = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="coder-frontend",
+    name="Frontend",
     run_in_background=False,
     prompt=f"""
-You are the Coder Frontend. Soul: "Beautiful UI is a conversation between design and code"
 {mcp_instruction}
 SPEC.md:
 {spec}
@@ -173,20 +179,28 @@ When done, write summary to: {task_dir}/review/frontend-summary.md
 )
 ```
 
-#### full-stack — run in parallel with worktree isolation
+#### full-stack — runtime-specific execution
+
+On Claude Code, run frontend and backend in parallel with `isolation="worktree"`.
+On Codex in this workspace, run write-heavy lanes sequentially unless the user
+has explicitly prepared separate Git worktrees and launched one Codex session in
+each. Codex subagents share the same working tree here, so parallel writers can
+collide.
+
+Document the chosen mode in the coder summaries.
+
+##### Claude Code: parallel with worktree isolation
 
 Each coder gets its own git worktree so they don't conflict. After both finish,
 the orchestrator merges their branches back into the working branch.
 
 ```python
 coder_be = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="coder-backend",
+    name="Backend",
     isolation="worktree",         # isolated git worktree
     run_in_background=True,       # parallel
     prompt=f"""
-You are the Coder Backend. Soul: "Clean, efficient code is art"
-
 SPEC.md:
 {spec}
 
@@ -198,13 +212,11 @@ When done, write summary to: {task_dir}/review/backend-summary.md
 )
 
 coder_fe = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="coder-frontend",
+    name="Frontend",
     isolation="worktree",         # isolated git worktree
     run_in_background=True,       # parallel
     prompt=f"""
-You are the Coder Frontend. Soul: "Beautiful UI is a conversation between design and code"
-
 SPEC.md:
 {spec}
 
@@ -231,6 +243,30 @@ When done, write summary to: {task_dir}/review/frontend-summary.md
 # Worktrees are auto-cleaned if the agent made no changes.
 ```
 
+##### Codex: sequential in the shared checkout
+
+```python
+coder_be = Agent(
+    subagent_type="coder-backend",
+    name="Backend",
+    run_in_background=False,
+    prompt="Implement the [BACKEND] section only, then write backend-summary.md",
+)
+
+# Wait, read backend-summary.md, then start frontend with the backend result
+# injected as context.
+coder_fe = Agent(
+    subagent_type="coder-frontend",
+    name="Frontend",
+    run_in_background=False,
+    prompt="Implement the [FRONTEND] section only, using backend-summary.md as contract context",
+)
+```
+
+Advanced parallel Codex path: create manual Git worktrees first, launch one
+Codex session per worktree, and coordinate through `team-board.md`. Do not ask
+two Codex subagents in the same checkout to edit overlapping files.
+
 ### Step 4: Spawn Reviewer
 
 Collect all summaries that exist:
@@ -243,11 +279,10 @@ if exists(f"{task_dir}/review/frontend-summary.md"):
     summaries.append(read(f"{task_dir}/review/frontend-summary.md"))
 
 reviewer = Agent(
-    subagent_type="general-purpose",
-    model="sonnet",
+    subagent_type="reviewer",
+    name="Reviewer",          # named so Step 5 can resume it instead of respawning
     run_in_background=False,
     prompt=f"""
-You are the Reviewer. Soul: "Code quality is non-negotiable"
 {mcp_instruction}
 SPEC.md: {task_dir}/SPEC.md
 Code location: {repo_path}
@@ -272,11 +307,10 @@ if exists(f"{task_dir}/review/approval.md"):
 else:
     issues = read(f"{task_dir}/review/issues.md")
     debugger = Agent(
-        subagent_type="general-purpose",
-        model="sonnet",
+        subagent_type="debugger",
+        name="Debugger",
         run_in_background=False,
         prompt=f"""
-You are the Debugger. Soul: "Bugs fear me"
 {mcp_instruction}
 Issues to fix:
 {issues}
@@ -287,8 +321,31 @@ Use MCP tools (if available) to trace the root cause and check impact before fix
 Fix all issues. Write fix log to: {task_dir}/review/fix-log.md
 """
     )
-    # Re-spawn Reviewer — repeat until approved or max 3 retries
+
+    # Resume the same Reviewer instead of spawning a fresh one. It already holds
+    # SPEC.md, the diff and the repo in its transcript, so the re-review only
+    # needs the delta. Repeat until approved or max 3 retries.
+    SendMessage(
+        to="Reviewer",
+        message=f"""
+The Debugger addressed the issues you raised. Fix log: {task_dir}/review/fix-log.md
+
+Re-review only what changed since your last pass. If the issues are resolved,
+write {task_dir}/review/approval.md. If any remain, rewrite
+{task_dir}/review/issues.md with just the outstanding ones.
+""",
+    )
 ```
+
+`SendMessage` does not require Agent Teams to be enabled — it resumes a named
+subagent from its own transcript. **Claude Code only.** Codex has no
+`SendMessage`; this file is symlinked into `.agents/skills/`, so a Codex
+orchestrator reads these same lines.
+
+On Codex — and on Claude when that Reviewer is no longer live — spawn a fresh
+`Agent(subagent_type="reviewer", name="Reviewer", ...)` instead, and pass it
+`fix-log.md` plus the previous `issues.md` so it can re-review without
+re-deriving the whole task. That costs tokens, not correctness.
 
 ### Step 6: Git Commit (after APPROVED)
 
@@ -332,12 +389,10 @@ write(f"{task_dir}/commit.md", commit_md)
 
 ```python
 learner = Agent(
-    subagent_type="general-purpose",
-    model="haiku",
+    subagent_type="learner",
+    name="Learner",
     run_in_background=False,
     prompt=f"""
-You are the Learner. Soul: "Every task is a lesson"
-
 Task artifacts to read:
 - SPEC: {task_dir}/SPEC.md
 - Backend summary (if exists): {task_dir}/review/backend-summary.md
@@ -357,11 +412,16 @@ Merge into existing content — never overwrite. Max 10 bullet points added.
 
 ## Agent Communication
 
-Agents do NOT communicate directly. Everything goes through the orchestrator:
+Agents do NOT communicate with each other. Everything goes through the orchestrator:
 
 1. Orchestrator reads output of previous agent
 2. Injects into the next agent's prompt
 3. File system is shared state: `tasks/[project]/[task-id]/`
+
+The one exception is the orchestrator resuming an agent it already spawned:
+`SendMessage(to="Reviewer", ...)` in Step 5 continues that Reviewer from its own
+transcript rather than paying to rebuild its context. That is still
+orchestrator→agent, not agent→agent.
 
 ## Key Principles
 

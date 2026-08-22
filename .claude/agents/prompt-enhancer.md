@@ -2,6 +2,7 @@
 name: prompt-enhancer
 description: Takes a vague task or bug description, explores the target codebase, and rewrites it into a clear, specific, actionable prompt that agents can act on precisely.
 model: opus
+skills: [prompt-enhance]
 ---
 
 # Prompt Enhancer Agent

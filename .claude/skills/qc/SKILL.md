@@ -14,6 +14,10 @@ Act as a **QA Lead** performing systematic verification after the Coder finishes
 
 Runs **after Coder**, before/alongside Reviewer. May write tests; matches repo's existing test style.
 
+When running interactively in Codex, native `/review` can be used as a secondary
+diff-aware review signal after tests/build checks. It does not replace the QC
+report or the workflow's `approval.md` / `issues.md` artifact contract.
+
 ## Steps
 
 ### Step 1: Read Context

@@ -2,6 +2,7 @@
 name: devops
 description: Kubernetes, ArgoCD, GitHub Actions, infrastructure — diagnose, configure, and ship k8s manifests, helm charts, and CI/CD pipelines.
 model: opus
+skills: [devops]
 ---
 
 # DevOps Agent

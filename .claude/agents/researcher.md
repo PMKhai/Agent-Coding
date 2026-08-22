@@ -2,6 +2,7 @@
 name: researcher
 description: Research docs, libraries, and best practices, write research reports
 model: opus
+skills: [research]
 ---
 
 # Researcher Agent

@@ -1,3 +1,9 @@
+---
+name: investigate
+description: Trace the root cause of a bug the user is hitting. Interactive and on-demand, not part of the automated workflow.
+argument-hint: "<bug description> [--target <repo>] [--fix] [--run [cmd]] [--team]"
+---
+
 # /investigate Command
 
 ## Purpose
@@ -39,11 +45,10 @@ If not, ask the user: _"Describe the bug — what happens vs what you expect, an
 
 ```python
 investigator = Agent(
-    subagent_type="general-purpose",
+    subagent_type="investigator",
+    name="Investigator",
     run_in_background=False,
     prompt=f"""
-You are the Investigator agent. Your soul: "Every bug has a birth certificate — I find it."
-
 ## Your Task
 Investigate this bug and identify the root cause.
 
@@ -92,7 +97,10 @@ Return a Root Cause Report directly in your response:
 ### Step 4 — Present findings
 
 Return the Investigator's Root Cause Report to the user.
-Ask: _"Want me to fix this?"_ — if yes, spawn the Debugger agent or handle inline.
+Ask: _"Want me to fix this?"_ — if yes, spawn the Debugger agent with the report
+as context. The Investigator cannot apply the fix itself: its frontmatter `tools`
+allowlist has no `Edit` or `Write`, and `sync-codex.js` puts it in
+`READ_ONLY_AGENTS`, so it is read-only under both runtimes by design.
 
 ### Step 5 — Run code (if `--run` provided)
 
@@ -117,9 +125,9 @@ bash_result = Bash(command=f"cd {target_path} && {run_command}", timeout=60000)
 | Option                  | Description                                                                                                                                                                                                                                                                                                                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `--target <path>`       | Path to the repo to investigate (default: cwd)                                                                                                                                                                                                                                                                                                                                 |
-| `--fix`                 | After finding root cause, also fix the bug                                                                                                                                                                                                                                                                                                                                     |
+| `--fix`                 | After the Root Cause Report, hand the fix to the Debugger agent. The Investigator is read-only and never patches the code itself.                                                                                                                                                                                                                                               |
 | `--run [cmd]`           | After investigation (and optional fix), run code to verify. If `cmd` is omitted, auto-detect from project files.                                                                                                                                                                                                                                                               |
-| `--team`                | When combined with `--fix`, hand the fix off to `/team-workflow` (parallel FE + BE + DevOps teammates) instead of letting the investigator patch it inline. Use for cross-layer bugs.                                                                                                                                                                                          |
+| `--team`                | When combined with `--fix`, hand the fix off to `/team-workflow` (parallel FE + BE + DevOps teammates) instead of to a single Debugger. Use for cross-layer bugs.                                                                                                                                                                                                              |
 | `--context-file <path>` | Read the bug description (and optionally a prior investigation transcript) from a markdown file instead of relying on the inline quoted argument. Used by the queue worker to forward the packaged context of a UI-driven investigation. When present, treat the file's contents as the **primary** bug description, and use the inline quoted argument only as a short title. |
 
 ## Example

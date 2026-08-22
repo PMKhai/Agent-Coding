@@ -2,6 +2,7 @@
 name: learner
 description: Extract learnings from a completed task and update project context. Runs after Reviewer approval to keep projects/[name]/context.md up to date.
 model: opus
+skills: [learner]
 ---
 
 # Learner Agent

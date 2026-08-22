@@ -1,3 +1,9 @@
+---
+name: sub-task
+description: Run a follow-up task on top of a completed one, inheriting its SPEC, implementation, and conventions.
+argument-hint: "<task-dir> <subtask-dir>"
+---
+
 # /sub-task Command
 
 ## Purpose

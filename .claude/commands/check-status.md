@@ -1,3 +1,9 @@
+---
+name: check-status
+description: Check how far a task has progressed through the workflow, or list every task in the workspace.
+argument-hint: "[project/]<task-id> | --list [project]"
+---
+
 # /check-status Command
 
 ## Purpose

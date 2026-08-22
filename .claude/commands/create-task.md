@@ -1,3 +1,9 @@
+---
+name: create-task
+description: Initialize a task directory for the multi-agent workflow, optionally bound to a target repo.
+argument-hint: "<description> [--target <repo>]"
+---
+
 # /create-task Command
 
 ## Purpose

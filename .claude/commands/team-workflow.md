@@ -1,5 +1,7 @@
 ---
-description: Run a task as a coordinated Agent Team — multiple teammates work concurrently and message each other directly. Use when a task naturally crosses team boundaries (FE + BE, or arch + impl). Counterpart of /workflow (sequential).
+name: team-workflow
+description: Run a task as a coordinated Agent Team — teammates work concurrently and message each other. Use when a task crosses team boundaries (FE + BE, impl + infra).
+argument-hint: "<task-id> | --new <description> [--target <repo>] [--teams <a,b>]"
 ---
 
 # /team-workflow Command
@@ -13,6 +15,12 @@ sequential `Agent()` chain that `/workflow` uses. Each teammate:
 - runs in parallel with the others
 - can `SendMessage` to teammates directly (no orchestrator round-trip)
 - shares a task list and mailbox
+
+Codex fallback: Codex has subagents but no Agent Teams or `SendMessage` in this
+workspace. When this command is invoked from Codex, keep the `team-board.md`
+contract, have the orchestrator relay messages through the board, and run
+write-heavy lanes sequentially unless the user has prepared separate Git
+worktrees and separate Codex sessions.
 
 This is the right shape when:
 
@@ -129,6 +137,10 @@ ORCHESTRATOR: commit + tasks/[id]/commit.md + Learner
    - the path to team-board.md (so they tick their checkbox + log decisions)
    - their repo allowlist (from companies.json)
 
+   Under Codex, replace parallel same-checkout writers with sequential lane
+   execution. Read `team-board.md` after every lane and inject any open
+   questions or decisions into the next lane prompt.
+
 6. **Wait** for all teammates to finish. If any fail, capture stderr in
    `tasks/[task-id]/team-board.md` under "Open questions".
 
@@ -214,6 +226,10 @@ cat tasks/[task-id]/review/{frontend,backend,devops,architect}-summary.md
 | Shared state      | `tasks/[id]/*.md` files          | `team-board.md` + mailbox                      |
 | Failure mode      | Halts at failing agent           | Other lanes keep going; failed lane rebalances |
 | Cost shape        | Lower (one agent at a time)      | Higher (concurrent) but faster wall-clock      |
+
+Codex degrades `/team-workflow` to file-based coordination through
+`team-board.md`; this preserves the artifact contract but loses direct
+teammate-to-teammate messaging.
 
 ## Common mistakes
 

@@ -1,3 +1,9 @@
+---
+name: queue
+description: Manage the sequential task queue — add, list, start, and clear tasks in queue.json.
+argument-hint: "add <description> [--target <repo>] | list | start | clear [--failed|--all]"
+---
+
 # /queue Command
 
 ## Purpose

@@ -5,7 +5,8 @@ description: >-
   isolation, edge-case hunting, and build verification (typecheck / lint /
   compile). Targets 80%+ coverage on critical paths with zero flaky tests.
 model: opus
-tools: Read, Grep, Glob, Bash, Edit, Write, TodoWrite, Task, ToolSearch, WebFetch, WebSearch, mcp__claude-in-chrome__*
+tools: Read, Grep, Glob, Bash, Edit, Write, TodoWrite, Agent, ToolSearch, WebFetch, WebSearch, mcp__claude-in-chrome__*
+skills: [qc]
 ---
 
 # QC Agent

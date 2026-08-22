@@ -3,6 +3,7 @@ name: reviewer
 description: Review code quality against SPEC.md, approve or find issues
 model: opus
 effort: high
+skills: [code-review]
 ---
 
 # Reviewer Agent

@@ -1,3 +1,9 @@
+---
+name: fix-bugs
+description: Fix a bug in an already-completed task, reusing that task's SPEC, approval, and commit as context.
+argument-hint: "<task-dir> <fix-dir>"
+---
+
 # /fix-bugs Command
 
 ## Purpose

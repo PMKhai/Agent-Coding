@@ -20,6 +20,11 @@ Review code quality — check correctness, security, and standards against SPEC.
 3. Read actual code from target repo or tasks/[task-id]/code/
 ```
 
+When running interactively in Codex, native `/review` may be used as an
+additional diff-aware pass for branch, commit, or uncommitted changes. Treat it
+as evidence, not as the final artifact: this skill must still write
+`approval.md` or `issues.md`.
+
 ### Step 2: Review Checklist
 
 ```
