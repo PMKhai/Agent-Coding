@@ -1554,7 +1554,7 @@ export default function Chat() {
                 onKeyDown={onKeyDown}
                 onPaste={onPaste}
                 placeholder={
-                  activeId ? "Ask URI about your code…" : "Create a chat first"
+                  activeId ? "Ask FreeBird about your code…" : "Create a chat first"
                 }
                 disabled={!activeId || streaming}
                 rows={1}

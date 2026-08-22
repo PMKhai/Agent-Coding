@@ -64,7 +64,7 @@ await startMemoryIndexer();
 startLinkHealthCheck();
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`URI Platform UI → http://localhost:${PORT}`);
+  console.log(`FreeBird Platform UI → http://localhost:${PORT}`);
   console.log(`Workspace: ${WORKSPACE}`);
   console.log(`Queue cron: polling every 5s`);
 });

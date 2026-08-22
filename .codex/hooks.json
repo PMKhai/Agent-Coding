@@ -1,0 +1,42 @@
+{
+  "description": "Codex lifecycle hooks for the FreeBird Platform workspace. Mirrors the hooks block in .claude/settings.json — the same three scripts, which detect the runtime from their stdin payload.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/guard-bash.js\"",
+            "statusMessage": "Checking command against guard rules",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/auto-format.js\"",
+            "statusMessage": "Formatting edited files",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.claude/hooks/notify.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

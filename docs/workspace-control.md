@@ -1,6 +1,6 @@
 # Workspace Control Panel
 
-tldr — The URI workspace is a **window into per-repo Claude state**, not a controller of it. It mirrors what each repo already has (CLAUDE.md, agents, hooks, settings, MCP) read-only, with two narrow write-through exceptions: `CLAUDE.md` (Tier 1) and `.mcp.json` (already shipped). All other per-repo state is view-only.
+tldr — The FreeBird workspace is a **window into per-repo Claude state**, not a controller of it. It mirrors what each repo already has (CLAUDE.md, agents, hooks, settings, MCP) read-only, with two narrow write-through exceptions: `CLAUDE.md` (Tier 1) and `.mcp.json` (already shipped). All other per-repo state is view-only.
 
 > **When to read this:** you are building, reviewing, or onboarding to the `/repos` page, `/mcp` page, or any workspace surface that touches another repo's `.claude/` directory.
 >
@@ -23,7 +23,7 @@ The reframe (locked by Brainstorm §1): **workspace is pull-first**. It reads, d
 
 Everything else — `.claude/settings.json`, `.claude/agents/*.md`, `.claude/skills/`, `~/.claude.json` — is **view-only** at Tier 1. See [Coverage matrix](#2-coverage-matrix) for the full breakdown and rationale.
 
-See `tasks/agent-coding/20260515-uri-central-control/research/brainstorm.md` §1 for the original framing.
+See `tasks/agent-coding/20260515-freebird-central-control/research/brainstorm.md` §1 for the original framing.
 
 ---
 
@@ -54,7 +54,7 @@ See `tasks/agent-coding/20260515-uri-central-control/research/brainstorm.md` §1
 - **symlinked + override** — entries are per-file (or per-dir for skills) symlinks pointing back to workspace source-of-truth; repo owner may drop a real file/dir with the same name to override one specific entry (filename match wins). See [§8](#8-per-repo-agent-override-workflow).
 - **source-of-truth** — workspace owns the master copy; repos consume via symlinks created by `linkRepo()` and the migration script.
 
-See `tasks/agent-coding/20260515-uri-central-control/research/brainstorm.md` §1 for the per-row reasoning.
+See `tasks/agent-coding/20260515-freebird-central-control/research/brainstorm.md` §1 for the per-row reasoning.
 
 ---
 
@@ -183,7 +183,7 @@ All endpoints live in `ui/server.js`. Line numbers are placeholders until the Ba
 
 ### `HealthResponse` shape (locked)
 
-Full TypeScript shape lives in [SPEC.md §2](../tasks/agent-coding/20260515-uri-central-control/SPEC.md). Key fields:
+Full TypeScript shape lives in [SPEC.md §2](../tasks/agent-coding/20260515-freebird-central-control/SPEC.md). Key fields:
 
 - `name`, `repoPath`, `company`, `exists`, `lastScannedAt`
 - `claudeMd: { exists, mtime, size }`
@@ -228,7 +228,7 @@ The following items are deliberately deferred. Future PRs touching this surface 
 - **Auto-repair on workspace move** — detecting a workspace move requires a filesystem watcher; manual "Repair links" button only.
 - **Tier 3 per-repo `.mcp.json`** — per-repo MCP already handled by the `/mcp` page + `projects/<name>/mcp.json` injection at spawn time; per-repo `.mcp.json` overrides remain out of scope.
 
-(Copied verbatim from [SPEC.md §8](../tasks/agent-coding/20260515-uri-central-control/SPEC.md) plus the per-repo agent resolution SPEC §7.)
+(Copied verbatim from [SPEC.md §8](../tasks/agent-coding/20260515-freebird-central-control/SPEC.md) plus the per-repo agent resolution SPEC §7.)
 
 ---
 

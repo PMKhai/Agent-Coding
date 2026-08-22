@@ -1,6 +1,10 @@
 #!/usr/bin/env node
-// PostToolUse hook for Edit / Write — runs a formatter on the touched file.
+// PostToolUse hook for Edit / Write — runs a formatter on the touched file(s).
 // Best-effort: silently skips if the formatter isn't installed.
+//
+// Runs under both Claude Code and Codex. Claude sends tool_input.file_path;
+// Codex edits go through apply_patch, which sends the patch text as
+// tool_input.command instead, so the paths get parsed out of the envelope.
 
 const fs = require("fs");
 const path = require("path");
@@ -13,10 +17,6 @@ try {
   process.exit(0);
 }
 
-const file = payload.tool_input?.file_path;
-if (!file || !fs.existsSync(file)) process.exit(0);
-
-const ext = path.extname(file).slice(1).toLowerCase();
 const TS_JS_EXTS = [
   "ts",
   "tsx",
@@ -62,17 +62,40 @@ function findPrettier(startDir) {
   return null;
 }
 
-if (TS_JS_EXTS.includes(ext)) {
-  const local = findPrettier(path.dirname(file));
-  if (local) tryRun(`"${local}" --write "${file}"`);
-  else if (has("prettier")) tryRun(`prettier --write "${file}"`);
-  else tryRun(`npx --no-install prettier --write "${file}"`);
-} else if (ext === "go") {
-  if (has("gofmt")) tryRun(`gofmt -w "${file}"`);
-} else if (ext === "py") {
-  if (has("ruff")) tryRun(`ruff format "${file}"`);
-  else if (has("black")) tryRun(`black -q "${file}"`);
-} else if (ext === "rs") {
-  if (has("rustfmt")) tryRun(`rustfmt --quiet "${file}"`);
+// apply_patch envelope lines: "*** Add File: a/b.ts", "*** Update File: ...",
+// "*** Delete File: ...", "*** Move to: ...". A deleted file has nothing to
+// format; a moved file gets formatted at its destination.
+function pathsFromPatch(patch, cwd) {
+  const out = [];
+  for (const line of String(patch).split("\n")) {
+    const m = line.match(/^\*\*\* (?:Add File|Update File|Move to):\s*(.+?)\s*$/);
+    if (m) out.push(path.resolve(cwd || process.cwd(), m[1]));
+  }
+  return [...new Set(out)];
+}
+
+function formatFile(file) {
+  const ext = path.extname(file).slice(1).toLowerCase();
+  if (TS_JS_EXTS.includes(ext)) {
+    const local = findPrettier(path.dirname(file));
+    if (local) tryRun(`"${local}" --write "${file}"`);
+    else if (has("prettier")) tryRun(`prettier --write "${file}"`);
+    else tryRun(`npx --no-install prettier --write "${file}"`);
+  } else if (ext === "go") {
+    if (has("gofmt")) tryRun(`gofmt -w "${file}"`);
+  } else if (ext === "py") {
+    if (has("ruff")) tryRun(`ruff format "${file}"`);
+    else if (has("black")) tryRun(`black -q "${file}"`);
+  } else if (ext === "rs") {
+    if (has("rustfmt")) tryRun(`rustfmt --quiet "${file}"`);
+  }
+}
+
+const files = payload.tool_input?.file_path
+  ? [payload.tool_input.file_path]
+  : pathsFromPatch(payload.tool_input?.command || "", payload.cwd);
+
+for (const file of files) {
+  if (file && fs.existsSync(file)) formatFile(file);
 }
 process.exit(0);

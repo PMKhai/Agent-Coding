@@ -1,0 +1,218 @@
+# Dual runtime: Claude Code + Codex
+
+This workspace runs on two agent runtimes off one config. `.claude/*` is the
+source of truth; everything Codex reads is generated from it by
+`scripts/sync-codex.js`.
+
+Verified against **Claude Code 2.1.239** and **Codex CLI 0.137.0**.
+
+> The published Codex manual runs ahead of the shipped binary in places — the
+> `[agents]` settings keys it documents do not parse on 0.137. Trust the binary,
+> and re-check with `$runtime-scout` after a Codex upgrade.
+
+---
+
+## Parity table
+
+| Concern            | Claude Code                          | Codex                                        | How it's shared                                          |
+| ------------------ | ------------------------------------ | -------------------------------------------- | -------------------------------------------------------- |
+| Instructions       | `CLAUDE.md`                          | `AGENTS.md` (root + nested, + `AGENTS.override.md`) | Two hand-written files. Change one, change the other. `sync-codex.js` reports root doc size against Codex's 32 KiB project-doc floor. |
+| Agent definitions  | `.claude/agents/*.md` + frontmatter  | `.codex/agents/*.toml`                        | Generated. `name`/`description`/`developer_instructions` required. |
+| Skills             | `.claude/skills/<n>/SKILL.md`        | `<repo_root>/.agents/skills/<n>/SKILL.md`     | **Symlinked** — identical format, one copy on disk.      |
+| Commands           | `.claude/commands/*.md` (`/name`)    | a skill (`$name`) — custom prompts deprecated | Generated stub pointing back at the command file.        |
+| Hooks              | `.claude/settings.json` → `hooks`    | `.codex/hooks.json`                           | Same 3-level shape; scripts detect the runtime at runtime.|
+| MCP servers        | `.mcp.json`                          | `[mcp_servers.*]` in `.codex/config.toml`     | Generated into a fenced block. Codex ignores `.mcp.json` at the repo root. |
+| Subagents          | `Agent()` tool                       | ask by name, `[agents]` in config             | Same roster, different invocation.                       |
+| Model selection    | `model:` frontmatter (`opus`)        | `model` in the `.toml` (`gpt-5.6-sol`)        | Generated.                                               |
+| Reasoning effort   | `effort:` frontmatter                | `model_reasoning_effort`                      | Generated, 1:1 (`low\|medium\|high\|xhigh\|max`).        |
+| Tool permissions   | `tools:` allowlist                   | `sandbox_mode` (`read-only` / `workspace-write`) | Generated from a per-agent list in the sync script.   |
+| Agent Teams        | teammates + `SendMessage`            | **none**                                       | Degrades — see below.                                    |
+| Worktree isolation | `isolation: "worktree"`              | Desktop-managed worktrees, not same-checkout CLI subagent isolation | Degrades here — see below.                    |
+| Lifecycle hooks    | `PermissionRequest`, `SubagentStart`, `SubagentStop`, `PreToolUse`, `PostToolUse` | same events in `.codex/hooks.json` | **Both runtimes.** Neither `PermissionRequest` nor `SubagentStart` is wired here yet. |
+| Dynamic workflows  | `.claude/workflows/*.js` (JS orchestration outside the context window) | **none**                     | Not adopted — see the WATCH entry in `docs/runtime-notes/2026-08-22-claude-agent-docs.md`. |
+| Exec policy rules  | Hook/tool allowlists                 | `.rules` prefix policies with inline tests     | Codex-only approval layer; document before enabling project defaults. |
+| Native review      | Reviewer agent                       | `/review` for branch/commit/uncommitted diff   | Optional extra signal; workflow artifacts still rule.     |
+| Non-interactive    | `claude -p --output-format stream-json` | `codex exec --json --sandbox <mode>`        | Different event schemas; Codex defaults read-only in exec. |
+
+---
+
+## What you lose on Codex
+
+| Missing                | Impact                                                                 | Workaround                                                                              |
+| ---------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Agent Teams**        | Teammates can't message each other; no `SendMessage`, no `ListAgents`. | `$team-workflow` coordinates lanes through `team-board.md`, relayed by the orchestrator. |
+| **Worktree isolation in this CLI workflow** | Two coders writing at once will collide.                              | Stage 2 runs sequentially. Create manual Git worktrees and separate Codex sessions to parallelize. |
+| **The web UI**         | `ui/server` spawns `claude` only.                                     | Run Codex from a terminal. Wiring the UI to `codex exec --json` is a separate project.   |
+| **`--chrome`**         | No Claude-in-Chrome browser integration for Coder Frontend.           | Use a Playwright MCP server, or verify the UI by hand.                                   |
+| **Artifacts**          | No `Artifact` publishing tool.                                        | Write files; publish some other way.                                                     |
+| **`skills:` preload**  | An agent's paired skill is not injected at startup; Codex agents keep discovering skills at runtime. | None needed. `sync-codex.js` drops the key, so this costs latency, not capability. |
+| **`attribution` settings** | Codex has no equivalent key for suppressing commit trailers.      | The no-`Co-Authored-By` rule stays prose for Codex — `projects/agent-coding/context.md`. |
+| **`argument-hint`**    | No `/` autocomplete to hint into; the generated skill stub drops the key. | None needed. Cosmetic on the Claude side only.                                       |
+| **`SendMessage` subagent resume** | Stage 4 cannot resume the Reviewer from its transcript, so every re-review after a Debugger pass re-reads SPEC.md, the diff and the repo from zero. | Spawn a fresh `reviewer` for each re-review pass, handing it `fix-log.md` and the previous `issues.md`. Costs tokens, not correctness. |
+
+## What you lose on Claude
+
+| Missing                     | Impact                                                                     |
+| --------------------------- | -------------------------------------------------------------------------- |
+| **`sandbox_mode` per agent**| Claude scopes agents by tool allowlist, which is coarser than a sandbox.    |
+
+Only one row survives here, and it is softer than it reads: `tools` /
+`disallowedTools` plus the `sandbox.*` settings tree cover most of what a
+per-agent `sandbox_mode` buys.
+
+> **Corrected 2026-08-22**, the same day the rows were added — this is not
+> accumulated drift. This table used to claim Claude lacked the
+> `PermissionRequest` and `SubagentStart` hooks. Both claims were false — Claude
+> has both, `PermissionRequest` with full allow/deny decision control and
+> `SubagentStart` with `agent_id`/`agent_type` matchers and
+> `hookSpecificOutput.additionalContext`. Source:
+> `https://code.claude.com/docs/en/hooks.md`, fetched 2026-08-22. Neither is
+> wired up here yet — absent from this kit is not the same as absent from the
+> runtime. See `docs/runtime-notes/2026-08-22-claude-agent-docs.md`.
+
+---
+
+## Running Codex here
+
+```bash
+# 1. Project the Claude config onto Codex — after ANY .claude/ edit
+node scripts/sync-codex.js
+
+# 2. Interactive, inside a target repo
+codex --cd /path/to/repo --add-dir /Users/khaipham/Documents/Agent-Coding
+
+# 3. Trust the hooks (once per hook definition)
+/hooks
+
+# 4. Non-interactive
+codex exec --json -C /path/to/repo \
+  --sandbox workspace-write \
+  --add-dir /Users/khaipham/Documents/Agent-Coding \
+  --dangerously-bypass-hook-trust \
+  "$workflow tasks/acme/20260422-login-api"
+```
+
+Use `--ephemeral` for disposable audits. `--json` is a JSONL event stream, not
+just the final answer; add `-o` / `--output-last-message` when a script needs a
+stable final-message file. Avoid deprecated `--full-auto`.
+
+### Hooks need an interactive trust pass — OPEN ITEM
+
+**Status: authored, not yet verified firing.** On Codex 0.137 the project hooks
+in `.codex/hooks.json` did not run in any `codex exec` test — with or without
+`--dangerously-bypass-hook-trust`, and whether written as `hooks.json` or as
+inline `[[hooks.PreToolUse]]` in `.codex/config.toml`. A destructive command
+that `guard-bash` blocks under Claude Code went straight through.
+
+The rest of the `.codex/` layer **is** loaded — an earlier invalid `[agents]`
+table in `.codex/config.toml` was reported as a parse error by the same command
+— so this is specific to hooks, not to project config discovery.
+
+What the evidence points at: Codex records a per-hook `trusted_hash` under
+`[hooks.state]` in `~/.codex/config.toml`, and only hooks with a matching entry
+run. The pre-existing global hooks on this machine have those entries and do
+fire. New hooks get them from the interactive `/hooks` review, which needs a
+TTY — `--dangerously-bypass-hook-trust` did not substitute for it on this build.
+
+**To activate, run once, interactively:**
+
+```bash
+cd /Users/khaipham/Documents/Agent-Coding
+codex          # accept the project trust prompt if offered
+/hooks         # review and trust all three
+```
+
+Then confirm the guard actually bites by asking Codex to run a `chmod` with mode
+`777` on a scratch path. A working guard denies it with
+`[guard-bash] BLOCKED: 777 permissions are insecure`. If it still runs, the
+hooks are not trusted, and the fallback is to register the same three entries in
+`~/.codex/hooks.json` with absolute paths — user-level hooks are independent of
+project trust, at the cost of firing in every Codex session rather than only
+this workspace.
+
+Everything else in this document — agents, skills, commands, MCP, subagent
+spawning — is verified working.
+
+### Project trust
+
+Codex ignores the `.codex/` layer of an untrusted project. Grant trust by
+launching `codex` interactively in the workspace once and accepting the prompt,
+or by adding it to `~/.codex/config.toml`:
+
+```toml
+[projects."/Users/khaipham/Documents/Agent-Coding"]
+trust_level = "trusted"
+```
+
+A `-c projects."...".trust_level=trusted` override on the command line is **not**
+enough — trust has to be persisted. `codex doctor` lists the config layers
+actually in play.
+
+### Dual-runtime hook scripts
+
+The three scripts in `.claude/hooks/` run under both runtimes:
+
+| Script           | Claude payload                     | Codex payload                                   |
+| ---------------- | ---------------------------------- | ----------------------------------------------- |
+| `guard-bash.js`  | blocks via exit 2 + stderr         | blocks via `permissionDecision: "deny"` on stdout |
+| `auto-format.js` | `tool_input.file_path`             | `tool_input.command`, parsed from the `apply_patch` envelope |
+| `notify.js`      | `tool_input.subagent_type`, `CLAUDE_HOOK_EVENT` | `agent_type`, `hook_event_name`, `turn_id` |
+
+A block emits the deny JSON, the stderr line, **and** exit 2 — Claude honours the
+JSON shape too, so one code path covers both.
+
+---
+
+## Gotchas
+
+- **A colon in a description kills the skill.** An unquoted `": "` in SKILL.md
+  frontmatter is invalid YAML; Codex drops the entire skill and reports it only
+  on stderr, so it looks like the skill just does not exist.
+  `scripts/sync-codex.js` lints for it and always quotes generated values.
+- **Skill list budget.** Codex spends at most 2% of the context window on the
+  skill list — 8000 characters when the window is unknown — and shortens
+  descriptions once that fills. The sync script prints the running total
+  (~4100 chars across 22 skills today, about half the floor) and fails if it
+  crosses.
+- **Project instruction budget.** Codex stops loading project instruction files
+  once the combined docs reach its project-doc byte limit. Keep root
+  `AGENTS.md` compact and move module-specific rules to nested `AGENTS.md` or
+  `AGENTS.override.md` files. `sync-codex.js` reports root `AGENTS.md` and
+  `CLAUDE.md` sizes.
+- **`gpt-5.6-terra` is gated on 0.137.** It returns `The 'gpt-5.6-terra' model
+  requires a newer version of Codex`. `gpt-5.6-sol` and `gpt-5.5` both work, so
+  the all-`sol` mapping is safe — a tiered sol/terra split is not, yet.
+- **`[agents]` is not a settings table on 0.137.** It parses as a map of role
+  name → agent config, so `agents.enabled` / `agents.default_subagent_model`
+  from the manual are rejected with `expected struct AgentRoleToml`. The
+  template omits the table entirely.
+- **Name collisions.** A command and a skill can share a name on Claude
+  (`/investigate` → the `investigate` skill). Codex has one namespace, so the
+  skill wins and the command stub is skipped.
+- **Never hand-edit the generated side.** `.codex/agents/*.toml` and
+  `.agents/skills/` are outputs. Edit `.claude/*` and re-run the sync. Real files
+  dropped into those paths are treated as deliberate per-repo overrides and left
+  alone.
+- **`.codex/config.toml` is gitignored.** It is generated from `.mcp.json`, which
+  carries machine-local commands and env values. `.codex/config.toml.template`
+  is the committed base; only the fenced MCP block gets rewritten, so hand edits
+  outside the fence survive.
+- **Codex reads target-repo `AGENTS.md` natively.** `--link-repos` never links or
+  overwrites it, exactly as Claude Code reads a target's own `CLAUDE.md`.
+
+---
+
+## Keeping this current
+
+Both CLIs ship features weekly. The `runtime-scout` agent diffs the official doc
+indexes against committed snapshots, reads only what changed, and writes a note
+with an ADOPT / WATCH / SKIP verdict:
+
+```
+/runtime-scout          # Claude Code
+$runtime-scout          # Codex
+```
+
+Findings land in [`runtime-notes/`](runtime-notes/). When a finding changes a row
+above, the scout updates this table in the same pass — **this table, not the
+notes, is the current state of the world.**

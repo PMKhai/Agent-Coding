@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // PreToolUse hook for Bash — blocks dangerous commands.
 // stdin: JSON with { tool_name, tool_input: { command, ... }, cwd, ... }
-// exit 0 → allow, exit 2 → block (stderr fed back to Claude).
+//
+// Runs under both Claude Code and Codex. Claude blocks on exit 2 with stderr;
+// Codex blocks on a permissionDecision JSON on stdout and ignores the exit
+// code. Both understand the JSON shape, so a block emits all three.
 
 const fs = require('fs')
 
@@ -36,7 +39,21 @@ const RULES = [
 
 for (const { re, why } of RULES) {
   if (re.test(cmd)) {
-    console.error(`[guard-bash] BLOCKED: ${why}\nCommand: ${cmd}`)
+    const reason = `[guard-bash] BLOCKED: ${why}\nCommand: ${cmd}`
+    // stdout JSON — how Codex denies, and a second signal Claude also honours.
+    process.stdout.write(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: reason,
+        },
+        // Legacy shape, accepted by both as a fallback.
+        decision: 'block',
+        reason,
+      }) + '\n'
+    )
+    console.error(reason)
     process.exit(2)
   }
 }

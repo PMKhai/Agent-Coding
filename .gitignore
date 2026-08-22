@@ -12,3 +12,6 @@ attachments/
 .cache/
 ui/coverage/
 tooner.log
+
+# Codex: generated from .mcp.json, machine-local
+.codex/config.toml

@@ -36,7 +36,7 @@ export default function App() {
         closeButton
         offset={0}
         toastOptions={{
-          className: "URI-toast",
+          className: "FreeBird-toast",
           style: {
             fontFamily: '"Figtree", system-ui, sans-serif',
           },

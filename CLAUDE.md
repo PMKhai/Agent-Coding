@@ -1,8 +1,8 @@
-# CLAUDE.md — URI Platform Workspace
+# CLAUDE.md — FreeBird Platform Workspace
 
 ## What This Is
 
-This is an **URI Platform Workspace** — an automated multi-agent system where each agent has its own "soul", orchestrated by the main session, working until the task is complete.
+This is a **FreeBird Platform Workspace** — an automated multi-agent system where each agent has its own "soul", orchestrated by the main session, working until the task is complete.
 
 **This file is the source of truth** — loaded at the start of every session.
 
@@ -28,10 +28,10 @@ ORCHESTRATOR (Main Session)
                        |
             [Stage 2 - Route by task type]
                        |
-       |---------------|---------------|
-       v               v               v
+      |---------------|---------------|
+      v               v               v
   backend-only    frontend-only    full-stack
-       |               |           (parallel)
+       |               |           (parallel on Claude worktrees)
   CODER-BE        CODER-FE      CODER-BE + CODER-FE
        |               |               |
        |---------------|---------------|
@@ -56,6 +56,11 @@ ORCHESTRATOR (Main Session)
 
 > **Spawn cwd note.** Claude CLI now spawns with `cwd: targetRepo` (when the task has a target repo) instead of `cwd: WORKSPACE`. The CLI loads the **target repo's** `CLAUDE.md` natively and resolves `.claude/agents`, `.claude/skills`, and `.claude/commands` filename-by-filename — every entry is either a per-file (or per-dir for skills) symlink back to this workspace's source-of-truth, or a real repo-local file that overrides it. Trading and `run-command` spawns have no target repo and keep `cwd: WORKSPACE`. See [Per-Repo Overrides](#per-repo-overrides).
 
+> **Codex parity note.** The Codex view of this workflow runs write-heavy FE/BE
+> lanes sequentially in a shared checkout unless the user creates manual Git
+> worktrees and launches separate Codex sessions. Keep this distinction in
+> `AGENTS.md` and `docs/dual-runtime.md` whenever workflow docs change.
+
 ### Agent Souls
 
 | Agent              | Soul                                                     | Model | Role                                             |
@@ -71,9 +76,9 @@ ORCHESTRATOR (Main Session)
 | **Documenter**     | "Clarity comes from showing, not just telling"           | opus  | Write docs + Mermaid diagrams from SPEC/code     |
 | **Learner**        | "Every task is a lesson"                                 | opus  | Extract learnings, update context.md             |
 
-Model is set via `model` parameter on `Agent()` — overrides agent definition frontmatter. All agents currently run on **opus**. Orchestrator can override per-task if cost/latency matters (e.g. `model="haiku"` for a trivial Learner pass).
+Model comes from each agent file's `model: opus` frontmatter. A `model=` argument on `Agent()` outranks it, so the orchestrator does not pass one — the spawn sites stay silent on model and the agent files remain the single place a tier is decided.
 
-Agents **do not communicate directly** — the orchestrator reads each agent's output and injects it into the next agent's prompt.
+Agents **do not communicate with each other** — the orchestrator reads each agent's output and injects it into the next agent's prompt. The orchestrator may resume an agent it already spawned via `SendMessage(to="Reviewer", …)`, which is still orchestrator→agent.
 
 ---
 
@@ -107,6 +112,9 @@ Spawn agents in **sequence** — **this actually runs agents**:
 /workflow 20260421-143300-write-api-user-service
 /workflow --new "Task description" --target /path/to/repo
 ```
+
+If the task input or SPEC says no commit, skip the commit/commit.md step and
+leave the working tree for review.
 
 ### `/team-workflow [task-id]`
 
@@ -159,7 +167,7 @@ Interactive bug root cause investigation — **not part of the automated workflo
 1. User describes the bug (description, error, reproduction steps)
 2. Investigator searches the codebase and traces the call chain
 3. Returns a Root Cause Report with file:line causal chain
-4. Optionally fixes the bug if user asks (`--fix` or follow-up message)
+4. Optionally hands the fix to the Debugger if user asks (`--fix` or follow-up message) — the Investigator itself is read-only
 
 **Difference from Debugger:**
 
@@ -251,33 +259,35 @@ Note: Agent Teams require **interactive** Claude Code sessions (terminal). The w
 
 ## Spawning Agents
 
-Main session uses the `Agent()` tool to spawn each agent:
+Main session uses the `Agent()` tool to spawn each agent. **`subagent_type` is the `name` of a file in `.claude/agents/`** — that file's body becomes the subagent's system prompt. Spawning as `general-purpose` and pasting a summary of the soul into `prompt` loads none of it, so always name the agent. `prompt` carries only task-specific context: paths, the SPEC, the previous stage's output.
 
 ```python
 # Stage 1 - Parallel
-architect = Agent(subagent_type="general-purpose", run_in_background=True, prompt="...")
-researcher = Agent(subagent_type="general-purpose", run_in_background=True, prompt="...")
+architect = Agent(subagent_type="architect", name="Architect", run_in_background=True, prompt="...")
+researcher = Agent(subagent_type="researcher", name="Researcher", run_in_background=True, prompt="...")
 # wait for both to finish
 
 # Stage 2 - Route by task type (read from SPEC.md)
 # backend-only:
-coder_be = Agent(subagent_type="general-purpose", run_in_background=False, prompt="...")
+coder_be = Agent(subagent_type="coder-backend", name="Backend", run_in_background=False, prompt="...")
 
 # frontend-only:
-coder_fe = Agent(subagent_type="general-purpose", run_in_background=False, prompt="...")
+coder_fe = Agent(subagent_type="coder-frontend", name="Frontend", run_in_background=False, prompt="...")
 
 # full-stack (parallel + worktree isolation):
-coder_be = Agent(subagent_type="general-purpose", isolation="worktree", run_in_background=True, prompt="...")
-coder_fe = Agent(subagent_type="general-purpose", isolation="worktree", run_in_background=True, prompt="...")
+coder_be = Agent(subagent_type="coder-backend", name="Backend", isolation="worktree", run_in_background=True, prompt="...")
+coder_fe = Agent(subagent_type="coder-frontend", name="Frontend", isolation="worktree", run_in_background=True, prompt="...")
 # wait for both, then merge branches back
 
 # Stage 3 - Review
-reviewer = Agent(subagent_type="general-purpose", run_in_background=False, prompt="...")
+reviewer = Agent(subagent_type="reviewer", name="Reviewer", run_in_background=False, prompt="...")
 
 # Stage 4 - If issues found
-debugger = Agent(subagent_type="general-purpose", run_in_background=False, prompt="...")
-# -> re-spawn Reviewer
+debugger = Agent(subagent_type="debugger", name="Debugger", run_in_background=False, prompt="...")
+# -> resume the same Reviewer: SendMessage(to="Reviewer", message="...")
 ```
+
+No spawn site passes `model=` — the agent files own that (see § Agent Souls).
 
 ---
 
@@ -450,3 +460,4 @@ Each registered target repo gets per-file symlinks under `.claude/agents/`, `.cl
 - **Sequential after Stage 2** — Reviewer -> Debugger (if needed) -> Re-review
 - **Symlink architecture for agents/skills/commands** — workspace is source-of-truth; each target repo holds per-file (or per-dir for skills) symlinks back to it. Spawn cwd flips to `targetRepo`, so the CLI loads target's `CLAUDE.md` natively while still resolving every workspace agent transparently. Per-repo overrides live as real files committed with `git add -f`. See [Per-Repo Overrides](#per-repo-overrides).
 - **`--add-dir WORKSPACE` is mandatory** — every spawn site that flips `cwd: targetRepo` also pushes `--add-dir <WORKSPACE>` so the spawned CLI retains read access to `projects/`, `tasks/`, and other workspace-owned paths.
+- **This workspace also runs on Codex** — `AGENTS.md` is the Codex-side counterpart of this file, and `.claude/*` stays the single source of truth for both. After editing any agent, skill, or command, run `node scripts/sync-codex.js` to regenerate `.codex/agents/*.toml` and `.agents/skills/`. Parity table and known gaps (no Agent Teams, no worktree isolation on Codex): [`docs/dual-runtime.md`](docs/dual-runtime.md). The `runtime-scout` agent keeps that table current — `/runtime-scout`.

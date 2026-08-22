@@ -1,0 +1,21 @@
+# Codex project config for this workspace.
+#
+# scripts/sync-codex.js copies this template to .codex/config.toml on first run
+# and thereafter only rewrites the generated MCP fence at the bottom — anything
+# you add outside that fence survives re-runs.
+#
+# .codex/config.toml is gitignored because the MCP block is generated from
+# .mcp.json, which carries machine-local commands and env values.
+
+# The workspace root is a git repo; stop walking up there.
+project_root_markers = [".git"]
+
+# No [agents] table here on purpose. Codex 0.137 parses [agents] as a map of
+# role name -> agent config, so the settings-style keys the manual documents
+# (agents.enabled, agents.default_subagent_model, ...) are rejected by this
+# build with "expected struct AgentRoleToml". Subagents are enabled by default,
+# and each agent declares its own model in .codex/agents/<name>.toml, so
+# nothing here is needed. Re-check with $runtime-scout before adding it back.
+
+# >>> generated: mcp servers >>>
+# <<< generated: mcp servers <<<

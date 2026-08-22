@@ -5,11 +5,11 @@
 // output to be 60–90% smaller. Works fully offline, no API key.
 //
 // localStorage keys:
-//   - URI:rtkai-status     →  "configured" | "skipped"
-//   - URI:rtkai-config     →  { mode, configuredAt, ... }
+//   - FreeBird:rtkai-status     →  "configured" | "skipped"
+//   - FreeBird:rtkai-config     →  { mode, configuredAt, ... }
 //
 // To re-trigger the banner, run in DevTools:
-//   localStorage.removeItem("URI:rtkai-status")
+//   localStorage.removeItem("FreeBird:rtkai-status")
 //
 // TODO(rtk-integration): the current autoConfigure() is a stub — it only
 // flips a localStorage flag. To make it real, the UI needs a backend
@@ -19,8 +19,8 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
-const STATUS_KEY = "URI:rtkai-status";
-const CONFIG_KEY = "URI:rtkai-config";
+const STATUS_KEY = "FreeBird:rtkai-status";
+const CONFIG_KEY = "FreeBird:rtkai-config";
 
 function loadStatus() {
   try {

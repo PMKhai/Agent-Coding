@@ -114,7 +114,7 @@ const IconLogoMark = () => (
     strokeLinecap="round"
     strokeLinejoin="round"
   >
-    {/* Two stacked Z-shaped strokes — distinctive URI mark */}
+    {/* Two stacked Z-shaped strokes — distinctive FreeBird mark */}
     <path d="M5 5h10l-7 7h10" />
     <path d="M5 16h10l-7 4" opacity="0.7" />
   </svg>
@@ -140,7 +140,7 @@ const DEFAULT_WORKSPACE_NAME = "Platform";
 
 // ─── nav item ───────────────────────────────────────────────────────────────
 
-const COLLAPSED_KEY = "URI:sidebar-collapsed";
+const COLLAPSED_KEY = "FreeBird:sidebar-collapsed";
 
 function loadCollapsed() {
   try {
