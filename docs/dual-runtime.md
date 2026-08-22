@@ -163,6 +163,48 @@ JSON shape too, so one code path covers both.
 
 ---
 
+## Running both runtimes on one checkout — they cannot see each other
+
+**Neither runtime knows the other exists.** There is no lock, no advisory
+warning, and no shared process registry. `ListAgents` enumerates Claude sessions
+and subagents only; it is structurally blind to Codex. Codex has no equivalent
+view of Claude. Two agents editing the same file in the same checkout will
+happily interleave.
+
+This is not theoretical. On 2026-08-22 a Claude subagent reported that
+`CLAUDE.md` and `AGENTS.md` were being rewritten under it and asked whether
+another agent was active. The orchestrator answered "no" on the strength of
+matching mtimes, content that matched the subagent's own findings, and an empty
+`ListAgents`. Four Codex sessions were in fact running in this same directory
+across that window (`~/.codex/sessions/2026/08/22/`, 14:51–14:59). The first two
+signals were real but proved only that the subagent *had* written — not that it
+was the *only* writer. `ListAgents` proved nothing at all, because it cannot see
+Codex.
+
+Nothing was lost that time: the subagent used anchored edits, which fail loudly
+rather than clobber, and three independent review passes followed. That was the
+safety margin doing its job, not evidence that the arrangement is safe.
+
+**Rules that follow:**
+
+- Decide up front which runtime owns a working session, and do not run the other
+  against the same checkout at the same time.
+- To genuinely parallelize, give each runtime **its own git worktree**. That is
+  the only isolation available here — Claude's `isolation: "worktree"` covers
+  its own subagents and knows nothing about a Codex process.
+- Instruct agents to use anchored edits that fail on mismatch, never
+  whole-file rewrites, whenever concurrent work is even possible.
+- **Never conclude "nobody else is editing" from `ListAgents` alone.** To check
+  for Codex activity, look at session rollouts directly:
+
+  ```bash
+  find ~/.codex/sessions -type f -newermt "-30 minutes"
+  ```
+
+  and confirm the `cwd` recorded in the first few lines of the rollout.
+
+---
+
 ## Gotchas
 
 - **A colon in a description kills the skill.** An unquoted `": "` in SKILL.md
