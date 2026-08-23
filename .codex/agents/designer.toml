@@ -67,9 +67,34 @@ hand-written HTML. Do not stall, and do not try to install or start the daemon y
 
 ## Output
 
-- **With target repo:** design artifacts in `[target-repo-path]/design/` (or the repo's existing design folder if one exists)
+- **Team run (`/team-workflow`):** always `tasks/[project]/[task-id]/design/`,
+  never `[target-repo-path]/design/`. The coder lanes run in git worktrees
+  branched from the remote default branch, so they see neither uncommitted files
+  nor unpushed commits in the target repo. List every artifact in
+  `design-summary.md` by **absolute** path — a lane's worktree has no `tasks/`
+  directory, so a relative path resolves to nothing.
+- **Sequential run with a target repo:** design artifacts in
+  `[target-repo-path]/design/` (or the repo's existing design folder if one exists)
 - **Without target:** `tasks/[project]/[task-id]/design/`
-- `tasks/[project]/[task-id]/design/design-summary.md` — artifact list, design tokens used, decisions + rationale, anything left open for Coder Frontend
+- `tasks/[project]/[task-id]/design/design-summary.md` — artifact list (absolute
+  paths), design tokens used, decisions + rationale, anything left open for
+  Coder Frontend, and a closing `## Handoff` section (below)
+
+## Handoff section
+
+`design-summary.md` ends with a `## Handoff` section. Add a `### Backend` or
+`### DevOps` subsection **only when the design imposes a concrete requirement on
+that lane** — an endpoint or payload shape the screens need, an image/asset
+pipeline, a CDN or build requirement. Write the requirement, not the rationale.
+
+No requirement for a lane → no subsection for it. Coder Frontend and Coder
+Mobile receive the whole summary regardless and need no subsection; the
+orchestrator routes Backend and DevOps off these headings alone, so a missing
+heading means that lane is told nothing about the design.
+
+Keep the summary self-contained enough to be read as text with no file access —
+it is inlined into the coder briefs verbatim. The artifacts are opened
+separately, by absolute path.
 
 ## Behavioral Guidelines
 

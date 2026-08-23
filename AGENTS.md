@@ -106,6 +106,7 @@ ORCHESTRATOR (Main Session)
 | **Coder Backend**  | "Clean, efficient code is art"                                   | medium | workspace-write | Implement backend — API, DB, services            |
 | **Designer**       | "A design that cannot be opened in a browser is just an opinion" | medium | workspace-write | Design artifacts via Open Design + diagram tools |
 | **Coder Frontend** | "Beautiful UI is a conversation between design and code"         | medium | workspace-write | Implement UI                                     |
+| **Coder Mobile**   | "Native feel is not a compromise — it's the goal"                | medium | workspace-write | Implement React Native / Expo screens            |
 | **DevOps**         | "If it's not in code, it doesn't exist"                          | medium | workspace-write | k8s manifests, Helm, ArgoCD, CI pipelines        |
 | **QC**             | "Coverage gaps and flaky tests don't survive my pass"             | medium | workspace-write | Diff-aware tests, coverage gaps, build checks    |
 | **Reviewer**       | "Code quality is non-negotiable"                                 | high   | read-only       | Review code, approve or reject                   |
@@ -208,15 +209,22 @@ and never to one another.
 
 `$team-workflow` therefore degrades to:
 
-1. Architect writes the lane assignments into `team-board.md`, as usual.
-2. The orchestrator spawns Frontend / Backend / DevOps as ordinary subagents.
-3. They coordinate by **reading and writing `team-board.md`**, not by messaging.
-4. The orchestrator relays anything one lane needs from another.
+1. Architect and Researcher plan as usual and fill `team-board.md`.
+2. Designer runs next when the board asks for it, writing
+   `tasks/[id]/design/` — identical on both runtimes.
+3. The orchestrator spawns Frontend / Mobile / Backend / DevOps as ordinary
+   subagents, **sequentially**, inlining the design summary into each prompt.
+   State in each prompt how the work divides, that Codex should wait before
+   continuing, and what summary to return.
+4. They coordinate by **reading and writing `team-board.md`**, not by messaging.
+5. The orchestrator relays anything one lane needs from another.
 
-The skill already uses that file-based board on both runtimes, so the workflow
-survives — what is lost is direct teammate-to-teammate negotiation, and the
-worktree isolation that let lanes write concurrently. Run the lanes sequentially
-unless you set up worktrees yourself.
+The design stage costs nothing on Codex — arguably it is simpler here. Designer
+never used a worktree or `SendMessage`; subagent results *do* return to the main
+thread; and with one shared checkout `tasks/[id]/design/` is plainly visible to
+every lane. What is still lost is direct teammate-to-teammate negotiation, and
+the worktree isolation that let lanes write concurrently. Run the lanes
+sequentially unless you set up worktrees yourself.
 
 Manual parallelization recipe:
 

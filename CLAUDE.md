@@ -70,6 +70,7 @@ ORCHESTRATOR (Main Session)
 | **Coder Backend**  | "Clean, efficient code is art"                           | opus  | Implement backend — API, DB, services            |
 | **Designer**       | "A design that cannot be opened in a browser is just an opinion" | opus | Design artifacts via Open Design MCP + diagram-design |
 | **Coder Frontend** | "Beautiful UI is a conversation between design and code" | opus  | Implement UI, verify with browser MCP            |
+| **Coder Mobile**   | "Native feel is not a compromise — it's the goal"        | opus  | Implement React Native / Expo screens and navigation |
 | **Reviewer**       | "Code quality is non-negotiable"                         | opus  | Review code, approve or reject                   |
 | **Debugger**       | "Bugs fear me"                                           | opus  | Fix issues found by Reviewer                     |
 | **Investigator**   | "Every bug has a birth certificate — I find it"          | opus  | Interactive root cause investigation (on-demand) |
@@ -120,7 +121,8 @@ leave the working tree for review.
 
 Same intent as `/workflow` but uses **Agent Teams** — Frontend, Backend,
 DevOps run as parallel teammates that `SendMessage` each other directly.
-Architect plans + writes lane assignments, Reviewer gates at the end.
+Architect and Researcher plan, Designer hands the UI lanes a concrete design
+when the board asks for one, Reviewer gates at the end.
 
 Best when a task naturally crosses team boundaries (FE+BE contract,
 service+k8s manifest). Reuses the engineer room composition from
@@ -132,16 +134,33 @@ service+k8s manifest). Reuses the engineer room composition from
 /team-workflow [task-id] --teams frontend,backend  # subset
 ```
 
-Spawn shape (lead session, single tool-use turn for Stage B):
+Spawn shape (lead session):
 
 ```python
-Agent(name="Architect", subagent_type="architect", run_in_background=false)
-# wait, read team-board.md, then in parallel:
-Agent(name="Frontend", subagent_type="coder-frontend", run_in_background=true, isolation="worktree")
-Agent(name="Backend",  subagent_type="coder-backend",  run_in_background=true, isolation="worktree")
-Agent(name="DevOps",   subagent_type="devops",         run_in_background=true, isolation="worktree")
+# Stage A — plan. The lead waits on ARTIFACTS, not on returned results: with
+# Agent Teams enabled a named spawn becomes a teammate, and a teammate's
+# output does not return.
+Agent(name="Architect",  subagent_type="architect")
+Agent(name="Researcher", subagent_type="researcher")
+# wait for SPEC.md + board rows, then read team-board.md
+
+# Stage B — design, only if the Architect filled the Designer row.
+# Deliberately NOT isolated: it writes into the workspace tasks/ tree that the
+# worktree-isolated Stage C lanes read from.
+Agent(name="Designer", subagent_type="designer")
+# wait for design/design-summary.md AND a "done" Designer row
+
+# Stage C — one tool-use turn, one teammate per filled lane.
+# Every task path inside these briefs is ABSOLUTE: a lane worktree is branched
+# from the remote default branch and has no tasks/ directory.
+Agent(name="Frontend", subagent_type="coder-frontend", isolation="worktree")
+Agent(name="Mobile",   subagent_type="coder-mobile",   isolation="worktree")
+Agent(name="Backend",  subagent_type="coder-backend",  isolation="worktree")
+Agent(name="DevOps",   subagent_type="devops",         isolation="worktree")
 # wait for all
-Agent(name="Reviewer", subagent_type="reviewer", run_in_background=false)
+
+# Stage D
+Agent(name="Reviewer", subagent_type="reviewer")
 ```
 
 There is no team object to create or tear down — the session has a single
@@ -302,6 +321,8 @@ agent-coding/
 │   │   ├── architect.md
 │   │   ├── coder-backend.md
 │   │   ├── coder-frontend.md
+│   │   ├── coder-mobile.md
+│   │   ├── designer.md
 │   │   ├── reviewer.md
 │   │   ├── debugger.md
 │   │   ├── investigator.md

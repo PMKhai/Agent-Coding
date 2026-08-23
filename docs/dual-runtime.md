@@ -28,6 +28,7 @@ Verified against **Claude Code 2.1.239** and **Codex CLI 0.137.0**.
 | Tool permissions   | `tools:` allowlist                   | `sandbox_mode` (`read-only` / `workspace-write`) | Generated from a per-agent list in the sync script.   |
 | Agent Teams        | teammates + `SendMessage`            | **none**                                       | Degrades — see below.                                    |
 | Worktree isolation | `isolation: "worktree"`              | Desktop-managed worktrees, not same-checkout CLI subagent isolation | Degrades here — see below.                    |
+| Design hand-off    | Designer writes `tasks/[id]/design/`; the orchestrator inlines `design-summary.md` and lists artifacts by absolute path, because a lane worktree is branched from the remote default branch and has no `tasks/` directory | Same inlining. One shared checkout, so lanes can also open the files directly, and subagent results return to the main thread | Same skill text — no runtime branch needed. |
 | Lifecycle hooks    | `PermissionRequest`, `SubagentStart`, `SubagentStop`, `PreToolUse`, `PostToolUse` | same events in `.codex/hooks.json` | **Both runtimes.** Neither `PermissionRequest` nor `SubagentStart` is wired here yet. |
 | Dynamic workflows  | `.claude/workflows/*.js` (JS orchestration outside the context window) | **none**                     | Not adopted — see the WATCH entry in `docs/runtime-notes/2026-08-22-claude-agent-docs.md`. |
 | Exec policy rules  | Hook/tool allowlists                 | `.rules` prefix policies with inline tests     | Codex-only approval layer; document before enabling project defaults. |
@@ -48,17 +49,19 @@ Verified against **Claude Code 2.1.239** and **Codex CLI 0.137.0**.
 | **`skills:` preload**  | An agent's paired skill is not injected at startup; Codex agents keep discovering skills at runtime. | None needed. `sync-codex.js` drops the key, so this costs latency, not capability. |
 | **`attribution` settings** | Codex has no equivalent key for suppressing commit trailers.      | The no-`Co-Authored-By` rule stays prose for Codex — `projects/agent-coding/context.md`. |
 | **`argument-hint`**    | No `/` autocomplete to hint into; the generated skill stub drops the key. | None needed. Cosmetic on the Claude side only.                                       |
-| **`SendMessage` subagent resume** | Stage 4 cannot resume the Reviewer from its transcript, so every re-review after a Debugger pass re-reads SPEC.md, the diff and the repo from zero. | Spawn a fresh `reviewer` for each re-review pass, handing it `fix-log.md` and the previous `issues.md`. Costs tokens, not correctness. |
+| **`SendMessage` subagent resume** | Stage 4 cannot resume the Reviewer from its transcript, so every re-review after a Debugger pass, and every Designer re-run after a `@Designer` issue, re-reads its inputs from zero. | Spawn a fresh `reviewer` for each re-review pass, handing it `fix-log.md` and the previous `issues.md`. Costs tokens, not correctness. |
 
 ## What you lose on Claude
 
 | Missing                     | Impact                                                                     |
 | --------------------------- | -------------------------------------------------------------------------- |
 | **`sandbox_mode` per agent**| Claude scopes agents by tool allowlist, which is coarser than a sandbox.    |
+| **`skills:` / `mcpServers:` frontmatter under Agent Teams** | Both fields are dropped when a subagent definition runs as a teammate; the body is appended to the system prompt and skills/MCP come from project + user settings. Nine agent files here declare `skills:`. Costs latency, not capability — the skill is still discoverable at runtime. |
 
-Only one row survives here, and it is softer than it reads: `tools` /
-`disallowedTools` plus the `sandbox.*` settings tree cover most of what a
-per-agent `sandbox_mode` buys.
+The first row is softer than it reads: `tools` / `disallowedTools` plus the
+`sandbox.*` settings tree cover most of what a per-agent `sandbox_mode` buys.
+The second is narrower than it reads — it applies only under Agent Teams, so
+`/workflow` and every ordinary subagent spawn keep their `skills:` preload.
 
 > **Corrected 2026-08-22**, the same day the rows were added — this is not
 > accumulated drift. This table used to claim Claude lacked the
