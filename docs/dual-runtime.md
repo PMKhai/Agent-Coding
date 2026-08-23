@@ -243,6 +243,40 @@ safety margin doing its job, not evidence that the arrangement is safe.
 
 ---
 
+## Subagent mechanics worth knowing before designing a stage
+
+Two facts established by probe rather than by reading, both load-bearing for any
+multi-stage workflow here. Neither is guessable, and getting either wrong
+produces a workflow that looks correct and silently loses work.
+
+**A worktree isolates git, not the filesystem.** A subagent spawned with
+`isolation: "worktree"` can read **absolute paths into the real checkout without
+restriction** — untracked and uncommitted files included. There is no filesystem
+sandbox between the two. The only guard is git-specific: a `git` command aimed at
+the shared checkout via `cd` or `-C` is refused with an explicit message.
+
+That asymmetry is what makes cross-stage hand-off possible at all. Artifacts live
+in the workspace `tasks/` tree, outside every worktree, and are handed over as
+**absolute** paths plus inlined text. Relative paths do not work: `tasks/` and
+`projects/` are gitignored, so they do not exist inside a worktree, and a
+worktree is branched from the remote default branch rather than `HEAD` — a lane
+misses uncommitted files *and* every unpushed local commit. Reads are probed; the
+write case is only inferred from the same guard.
+
+**`run_in_background: false` is a no-op in an interactive session.** Fork mode is
+on by default there and the foreground cannot be requested; the flag is honoured
+only under `-p` and the Agent SDK. A named spawn also becomes a *teammate*, and a
+teammate's idle notification **carries no output**.
+
+So a stage can never be gated on a spawn returning. Gate on artifacts instead:
+the file exists and is non-empty **and** the agent's row on the shared board
+reads `done`, with a recovery path for when only one of the two holds. Agents are
+documented to sometimes finish without marking their task complete, and this
+workspace hit exactly that failure twice in one day — an agent reporting idle
+with an empty output directory.
+
+---
+
 ## Gotchas
 
 - **A colon in a description kills the skill.** An unquoted `": "` in SKILL.md
