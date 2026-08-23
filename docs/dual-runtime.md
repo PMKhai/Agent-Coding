@@ -134,10 +134,39 @@ Check the wiring any time with `/hooks`: the three events this workspace uses �
 `PreToolUse`, `PostToolUse`, `SubagentStop` — each read one more installed and
 active than the user-level hooks alone provide.
 
-> If `/hooks` warns that hooks load from both `~/.codex/hooks.json` and
-> `~/.codex/config.toml`, that is the **user-level** config carrying both
-> representations, not this workspace. Codex loads both and warns. Keep one form
-> per layer to silence it.
+### Trust is keyed by file path and index — moving a hook silently breaks it
+
+The entries under `[hooks.state]` in `~/.codex/config.toml` are keyed
+`<absolute file path>:<event>:<group index>:<hook index>`:
+
+```toml
+[hooks.state."/Users/khaipham/.codex/hooks.json:pre_tool_use:0:0"]
+[hooks.state."/Users/khaipham/.codex/config.toml:session_start:0:0"]
+[hooks.state."/Users/khaipham/Documents/Agent-Coding/.codex/hooks.json:pre_tool_use:0:0"]
+```
+
+So trust does not follow a hook around. **Moving one between files, or inserting
+a matcher group ahead of it and shifting its index, produces a new key with no
+stored hash — and Codex skips unhashed hooks silently.** Same for editing a hook
+in place: the hash changes, the entry no longer matches, and it stops firing
+with no error. Only `/hooks` tells you.
+
+Consequences worth planning around:
+
+- Reordering the groups in a `hooks.json` invalidates every hook after the
+  insertion point, not just the new one. Append rather than insert.
+- Consolidating a layer's hooks into one representation costs a re-trust of
+  everything that moved.
+- A hook that "stopped working after a refactor" is almost always this, not a
+  logic bug.
+
+> **On the "hooks load from both" warning.** If `/hooks` reports hooks coming
+> from both `~/.codex/hooks.json` and `~/.codex/config.toml`, that is the
+> **user-level** layer carrying both representations, not this workspace. Codex
+> loads both and warns; nothing is broken. On this machine the two sides are
+> written by different installers — Orca owns `hooks.json`, codebase-memory-mcp
+> owns a fenced block in `config.toml` — so consolidating means re-trusting what
+> moves *and* losing to whichever installer runs next. Left as is deliberately.
 
 Everything in this document — agents, skills, commands, MCP, subagent spawning,
 hooks — is now verified working.
