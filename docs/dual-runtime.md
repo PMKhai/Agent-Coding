@@ -99,42 +99,48 @@ Use `--ephemeral` for disposable audits. `--json` is a JSONL event stream, not
 just the final answer; add `-o` / `--output-last-message` when a script needs a
 stable final-message file. Avoid deprecated `--full-auto`.
 
-### Hooks need an interactive trust pass — OPEN ITEM
+### Hooks need one interactive trust pass — RESOLVED 2026-08-23
 
-**Status: authored, not yet verified firing.** On Codex 0.137 the project hooks
-in `.codex/hooks.json` did not run in any `codex exec` test — with or without
-`--dangerously-bypass-hook-trust`, and whether written as `hooks.json` or as
-inline `[[hooks.PreToolUse]]` in `.codex/config.toml`. A destructive command
-that `guard-bash` blocks under Claude Code went straight through.
+**Status: verified firing on both runtimes.** The three hooks in
+`.codex/hooks.json` run under Codex once the project is trusted and the hooks
+reviewed. Confirmed end to end by asking Codex to loosen a scratch file's mode
+to world-writable:
 
-The rest of the `.codex/` layer **is** loaded — an earlier invalid `[agents]`
-table in `.codex/config.toml` was reported as a parse error by the same command
-— so this is specific to hooks, not to project config discovery.
-
-What the evidence points at: Codex records a per-hook `trusted_hash` under
-`[hooks.state]` in `~/.codex/config.toml`, and only hooks with a matching entry
-run. The pre-existing global hooks on this machine have those entries and do
-fire. New hooks get them from the interactive `/hooks` review, which needs a
-TTY — `--dangerously-bypass-hook-trust` did not substitute for it on this build.
-
-**To activate, run once, interactively:**
-
-```bash
-cd /Users/khaipham/Documents/Agent-Coding
-codex          # accept the project trust prompt if offered
-/hooks         # review and trust all three
+```
+Command blocked by PreToolUse hook:
+[guard-bash] BLOCKED: 777 permissions are insecure — use a tighter mode.
 ```
 
-Then confirm the guard actually bites by asking Codex to run a `chmod` with mode
-`777` on a scratch path. A working guard denies it with
-`[guard-bash] BLOCKED: 777 permissions are insecure`. If it still runs, the
-hooks are not trusted, and the fallback is to register the same three entries in
-`~/.codex/hooks.json` with absolute paths — user-level hooks are independent of
-project trust, at the cost of firing in every Codex session rather than only
-this workspace.
+One `.claude/hooks/guard-bash.js`, one `permissionDecision: "deny"` JSON on
+stdout, blocking on both runtimes.
 
-Everything else in this document — agents, skills, commands, MCP, subagent
-spawning — is verified working.
+**What was actually required**, and why every earlier `codex exec` run saw
+nothing:
+
+1. Trust the project, so the `.codex/` layer loads at all.
+2. Run `/hooks` **interactively, once**, to review and trust each hook
+   definition. Codex stores a `trusted_hash` per hook and silently skips any
+   hook without one.
+
+`--dangerously-bypass-hook-trust` did **not** substitute for step 2 on 0.137.
+Every non-interactive attempt — in both the `hooks.json` and the inline
+`[[hooks]]` form — ran with the hooks skipped and no error, which is why this
+looked for a while like a discovery failure rather than a trust failure.
+
+Editing a hook definition invalidates its hash, so any change to
+`.codex/hooks.json` needs another `/hooks` pass.
+
+Check the wiring any time with `/hooks`: the three events this workspace uses —
+`PreToolUse`, `PostToolUse`, `SubagentStop` — each read one more installed and
+active than the user-level hooks alone provide.
+
+> If `/hooks` warns that hooks load from both `~/.codex/hooks.json` and
+> `~/.codex/config.toml`, that is the **user-level** config carrying both
+> representations, not this workspace. Codex loads both and warns. Keep one form
+> per layer to silence it.
+
+Everything in this document — agents, skills, commands, MCP, subagent spawning,
+hooks — is now verified working.
 
 ### Project trust
 
