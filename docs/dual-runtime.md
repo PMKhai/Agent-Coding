@@ -21,7 +21,7 @@ Verified against **Claude Code 2.1.239** and **Codex CLI 0.137.0**.
 | Skills             | `.claude/skills/<n>/SKILL.md`        | `<repo_root>/.agents/skills/<n>/SKILL.md`     | **Symlinked** — identical format, one copy on disk.      |
 | Commands           | `.claude/commands/*.md` (`/name`)    | a skill (`$name`) — custom prompts deprecated | Generated stub pointing back at the command file.        |
 | Hooks              | `.claude/settings.json` → `hooks`    | `.codex/hooks.json`                           | Same 3-level shape; scripts detect the runtime at runtime.|
-| MCP servers        | `.mcp.json`                          | `[mcp_servers.*]` in `.codex/config.toml`     | Generated into a fenced block. Codex ignores `.mcp.json` at the repo root. |
+| MCP servers        | `.mcp.json`                          | `[mcp_servers.*]` in `.codex/config.toml`     | Generated into a fenced block. Codex ignores `.mcp.json` at the repo root. Open Design is the exception — user scope on both runtimes, see Gotchas. |
 | Subagents          | `Agent()` tool                       | ask by name, `[agents]` in config             | Same roster, different invocation.                       |
 | Model selection    | `model:` frontmatter (`opus`)        | `model` in the `.toml` (`gpt-5.6-sol`)        | Generated.                                               |
 | Reasoning effort   | `effort:` frontmatter                | `model_reasoning_effort`                      | Generated, 1:1 (`low\|medium\|high\|xhigh\|max`).        |
@@ -311,6 +311,33 @@ with an empty output directory.
   carries machine-local commands and env values. `.codex/config.toml.template`
   is the committed base; only the fenced MCP block gets rewritten, so hand edits
   outside the fence survive.
+- **Open Design MCP is registered at user scope, not through this workspace.**
+  It is the one MCP server both runtimes need and neither gets from
+  `.mcp.json`. Register it with the app's own installer, which writes the exact
+  launch spec from the Settings → MCP panel:
+
+  ```bash
+  OD_CLI="/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs"
+  node "$OD_CLI" mcp install claude --daemon-url http://127.0.0.1:<live-port>
+  node "$OD_CLI" mcp install codex  --daemon-url http://127.0.0.1:<live-port>
+  ```
+
+  Claude lands in `~/.claude.json` (user scope — required, because agents spawn
+  with `cwd: targetRepo`, so a workspace `.mcp.json` would not be loaded when
+  Designer works on another repo). Codex lands in `~/.codex/config.toml`.
+  Two traps, both of which silently produce a Designer that always falls back:
+
+  - **Do not use the `open-design@open-design` plugin.** It ships nothing but a
+    `.mcp.json` running bare `od`, which resolves to `/usr/bin/od` — the BSD
+    octal-dump utility. Removed from `.claude/settings.json` on 2026-08-26.
+  - **Never hardcode `--daemon-url` in the registered entry.** The desktop app
+    binds an ephemeral port, not the documented `7456`, and `resolveDaemonUrl()`
+    gives that flag top priority — passing it disables IPC discovery. The flag
+    above is only used at install time to read `/api/mcp/install-info`; it does
+    not end up in the config. The installed entry discovers the daemon through
+    `OD_SIDECAR_IPC_PATH` and launches the app headlessly via
+    `OD_MCP_BOOTSTRAP_COMMAND` when it is down, so no one has to open the app
+    first.
 - **Codex reads target-repo `AGENTS.md` natively.** `--link-repos` never links or
   overwrites it, exactly as Claude Code reads a target's own `CLAUDE.md`.
 

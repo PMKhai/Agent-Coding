@@ -22,7 +22,6 @@
     }
   },
   "enabledPlugins": {
-    "open-design@open-design": true,
     "diagram-design@diagram-design": true
   },
   "hooks": {

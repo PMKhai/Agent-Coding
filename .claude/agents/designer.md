@@ -41,10 +41,28 @@ tells Coder Frontend exactly what to build.
 | Sequence, ER, state machine for docs | `documenter` conventions (Mermaid) — do not duplicate its job |
 | One-off chart or data viz | `dataviz` skill |
 
-**Open Design preflight:** it talks to a local daemon over stdio MCP. Before relying on it, confirm
-`mcp__open-design__*` tools are actually present in your tool list. If they are missing, the `od`
-daemon is not running — say so in `design-summary.md` and fall back to `diagram-design` +
-hand-written HTML. Do not stall, and do not try to install or start the daemon yourself.
+### Open Design is a commissioning API, not a drawing tool
+
+`start_run` spawns OpenDesign's **own agent CLI** to do the work and returns a `runId`
+immediately. One run is a full agent session — commission deliberately, not once per tweak.
+
+1. `list_skills` / `list_plugins` — pick a recipe by its real id. Never invent one.
+2. `create_project` — a run needs a project. `list_projects` first if you mean to reuse one.
+3. `start_run(project, prompt, skill)` — generate a fresh `requestId` (UUID) before the call and
+   reuse it verbatim on any retry; the same id with a different payload is rejected.
+4. `get_run(runId)` until status is terminal. Success carries `previewUrl` and `agentMessage` —
+   read `agentMessage` when there is no preview, because that is where the inner agent puts a
+   clarifying question instead of files.
+5. `get_artifact` to pull the entry file plus every sibling it references. Prefer it over repeated
+   `get_file`.
+6. Copy the artifacts into your Output directory (below). A file that exists only inside
+   OpenDesign's own project store is not a hand-off — Coder Frontend cannot open it.
+
+**Open Design preflight:** confirm `mcp__open-design__*` tools are actually present in your tool
+list before relying on them. The MCP server launches the OpenDesign app headlessly on its own when
+the daemon is down, so missing tools mean the server is **not registered for this runtime** — not
+that the daemon is asleep. Say which it is in `design-summary.md`, fall back to `diagram-design` +
+hand-written HTML, and do not stall or try to install or start anything yourself.
 
 ## Focus Areas
 

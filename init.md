@@ -179,7 +179,80 @@ grep -c "Browser automation policy" "$HOME/.claude/CLAUDE.md"   # → 1
 
 ---
 
-## Step 5 — Install UI dependencies
+## Step 5 — Register the Open Design MCP (Designer agent) **[OPTIONAL]**
+
+The `designer` agent prefers the Open Design MCP for prototypes, landing pages, dashboards and
+slides. Without it Designer still works — it degrades to the `diagram-design` skill plus
+hand-written HTML and records the degradation in `design-summary.md`. Skip this step if the user
+does not want the desktop app.
+
+**Prerequisite [MANUAL]:** the user installs the OpenDesign desktop app from
+[open-design.ai](https://open-design.ai) or [GitHub Releases](https://github.com/nexu-io/open-design/releases),
+then launches it once so the daemon and its IPC socket exist.
+
+### Do NOT enable the `open-design` Claude Code plugin
+
+The marketplace plugin ships nothing but a `.mcp.json`, and that file is wrong in two ways:
+
+1. It runs the bare command `od`, which on macOS and most Linux distros resolves to the POSIX
+   **octal-dump** utility at `/usr/bin/od` — not OpenDesign.
+2. It hardcodes `--daemon-url http://127.0.0.1:7456`, while the desktop app binds an **ephemeral**
+   port. That flag also outranks the built-in IPC discovery, so passing it guarantees failure.
+
+Both failures are silent — the `mcp__open-design__*` tools simply never appear and Designer falls
+back forever. If the plugin is already enabled, set it to `false` in `~/.claude/settings.json`
+**and** in the workspace `.claude/settings.json` (it can be enabled in either):
+
+```json
+"enabledPlugins": { "open-design@open-design": false }
+```
+
+### Register with the app's own installer instead
+
+It writes the exact launch spec shown in the app's **Settings → MCP server** panel.
+
+```bash
+# macOS — Linux AppImage: <extract-dir>/resources/app/prebundled/daemon/daemon-cli.mjs
+OD_CLI="/Applications/Open Design.app/Contents/Resources/app/prebundled/daemon/daemon-cli.mjs"
+
+# the daemon logs its own URL, ephemeral port included
+OD_PORT=$(python3 - <<'PY'
+import os, re
+log = os.path.expanduser("~/Library/Application Support/Open Design/namespaces/release-stable/logs/daemon/latest.log")
+m = re.findall(r'"url":\s*"http://127\.0\.0\.1:(\d+)"', open(log).read())
+print(m[-1] if m else "")
+PY
+)
+curl -s "http://127.0.0.1:$OD_PORT/api/health"   # → {"ok":true,"version":"..."}
+
+node "$OD_CLI" mcp install claude --daemon-url "http://127.0.0.1:$OD_PORT"
+node "$OD_CLI" mcp install codex  --daemon-url "http://127.0.0.1:$OD_PORT"   # only if Codex CLI is in use
+```
+
+`--daemon-url` here is read-only setup input — the installer calls `/api/mcp/install-info` with it
+and **does not** write it into the resulting config. The registered entry finds the daemon through
+`OD_SIDECAR_IPC_PATH` and relaunches the app headlessly through `OD_MCP_BOOTSTRAP_COMMAND` when it
+is down, so nobody has to open the app first and the ephemeral port never matters again.
+
+**Scope matters.** The Claude entry lands in `~/.claude.json` at **user scope**, which is required:
+workspace agents spawn with `cwd: targetRepo`, so a project-scoped `.mcp.json` living in this
+workspace would not be loaded when Designer works on some other repo. User scope also means a new
+target repo needs **no MCP setup at all** — its agents already resolve through the `.claude/agents`
+symlink farm (`node scripts/migrate-repo-links.js`), and its MCP servers come from user scope.
+
+**Verify:**
+
+```bash
+claude mcp list 2>&1 | grep open-design
+# → open-design: /Applications/Open Design.app/.../daemon-cli.mjs mcp - ✔ Connected
+```
+
+Exactly one line. A second `plugin:open-design:open-design` line marked ✘ means the plugin is still
+enabled somewhere — go back and disable it.
+
+---
+
+## Step 6 — Install UI dependencies
 
 The workspace ships a local web UI under `ui/`. End-users who only use the CLI can skip this step.
 
@@ -197,7 +270,7 @@ test -d ui/node_modules && echo "ok"
 
 ---
 
-## Step 6 — Start the UI server **[OPTIONAL]**
+## Step 7 — Start the UI server **[OPTIONAL]**
 
 ```bash
 cd ui && npm run dev
@@ -228,6 +301,9 @@ claude mcp list | grep -E "playwright.*Connected"
 grep "rtk hook claude" "$HOME/.claude/settings.json"
 grep "Browser automation policy" "$HOME/.claude/CLAUDE.md"
 test -f "$HOME/.claude/RTK.md" && echo "RTK.md ok"
+
+# only if Step 5 ran
+claude mcp list 2>&1 | grep -E "^open-design:.*Connected"
 ```
 
 If all five pass, the setup matches the source machine. Tell the user **"Restart Claude Code now"** — hooks and MCP servers are only loaded at session start.
@@ -240,6 +316,8 @@ If all five pass, the setup matches the source machine. Tell the user **"Restart
 - Does not install Homebrew / Node / git / curl (user must already have them — different package managers per OS).
 - Does not install WSL on Windows — user runs `wsl --install` in PowerShell themselves.
 - Does not install the Claude in Chrome extension (manual — Chrome Web Store).
+- Does not install the OpenDesign desktop app (manual — DMG / AppImage from the vendor). Step 5
+  only registers the MCP server against an app that is already installed.
 - Does not configure user-specific settings (model preference, permission mode, additional directories, API keys, MCP secrets, Gmail/Drive/Calendar OAuth tokens). These are personal and must not be copied between machines.
 - Does not touch project-level `.claude/settings.json` in this repo — that's already version-controlled.
 
@@ -258,3 +336,5 @@ If anything broke, undo per-step:
 - RTK (Linux/WSL): `rm $(which rtk)` (typically `~/.cargo/bin/rtk` or `~/.local/bin/rtk`) + remove the hook entry.
 - Playwright MCP: `claude mcp remove -s user playwright`.
 - Policy text: open `~/.claude/CLAUDE.md` and delete the "Browser automation policy" section.
+- Open Design MCP: `node "$OD_CLI" mcp install claude --uninstall` (add `codex` likewise), or
+  `claude mcp remove -s user open-design`.
